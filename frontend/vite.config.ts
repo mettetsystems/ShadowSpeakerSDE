@@ -1,12 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+const apiProxy = process.env.VITE_API_PROXY ?? 'http://127.0.0.1:8000';
+
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/projects': 'http://127.0.0.1:8000',
-      '/health': 'http://127.0.0.1:8000',
+      '/projects': apiProxy,
+      '/health': apiProxy,
     },
   },
   test: {

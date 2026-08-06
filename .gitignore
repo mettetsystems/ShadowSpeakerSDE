@@ -14,6 +14,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/coverage/
 
+# Local make deploy process state
+.run/
+
 # OS / editor
 .DS_Store
 .idea/

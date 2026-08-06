@@ -17,13 +17,91 @@ Together they form a coherent vertical slice: create a story project, plan chapt
 
 ---
 
+## Getting started
+
+Installation and local deploy are driven by **Make**. Tool checks run before install so missing Python/Node/npm/curl (and busy ports) fail early with clear messages instead of halfway through setup.
+
+### One-time install
+
+From the repository root:
+
+```bash
+make install
+```
+
+This runs `make check-tools`, then creates the backend virtualenv, installs Python packages, and installs frontend npm packages.
+
+To verify the toolchain alone:
+
+```bash
+make check-tools
+```
+
+### Deploy (run the app)
+
+```bash
+make deploy
+```
+
+`deploy` runs `install` (including tool checks) and then starts the API and UI. When healthy you get:
+
+- UI: http://127.0.0.1:5173
+- API: http://127.0.0.1:8000
+- OpenAPI docs: http://127.0.0.1:8000/docs
+
+Useful companions:
+
+```bash
+make status   # are API/UI process files alive?
+make stop     # stop processes started by deploy/run
+make run      # start without reinstalling (after a prior install)
+```
+
+If the default ports are taken:
+
+```bash
+make deploy API_PORT=8001 WEB_PORT=5174
+```
+
+The Makefile exports `VITE_API_PROXY` so the Vite proxy tracks `API_PORT`.
+
+### Prerequisites (checked automatically)
+
+| Tool | Minimum |
+|------|---------|
+| GNU Make | any recent |
+| Python | 3.12+ (`python3` on PATH, with `venv`) |
+| Node.js | 20+ |
+| npm | bundled with Node |
+| curl | used to verify API health on deploy |
+
+### Manual fallback (optional)
+
+If you prefer not to use Make after tools are verified:
+
+```bash
+# Backend
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn shadowspeaker.main:app --reload --port 8000
+
+# Frontend (second terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
 ## Table of contents
 
-1. [Why this exists](#why-this-exists)
-2. [What you can do today](#what-you-can-do-today)
-3. [What is intentionally out of scope](#what-is-intentionally-out-of-scope)
-4. [Repository layout](#repository-layout)
-5. [Branding (logo and favicon)](#branding-logo-and-favicon)
+1. [Getting started](#getting-started)
+2. [Why this exists](#why-this-exists)
+3. [What you can do today](#what-you-can-do-today)
+4. [What is intentionally out of scope](#what-is-intentionally-out-of-scope)
+5. [Repository layout](#repository-layout)
 6. [Architecture overview](#architecture-overview)
 7. [Domain model](#domain-model)
 8. [User interface](#user-interface)
@@ -33,13 +111,12 @@ Together they form a coherent vertical slice: create a story project, plan chapt
 12. [Agent writing pack (chapter-by-chapter consistency)](#agent-writing-pack-chapter-by-chapter-consistency)
 13. [Suggested novelist workflow](#suggested-novelist-workflow)
 14. [Suggested agentic writing workflow](#suggested-agentic-writing-workflow)
-15. [Getting started](#getting-started)
-16. [Configuration notes](#configuration-notes)
-17. [Testing, linting, and type checking](#testing-linting-and-type-checking)
-18. [Extension points for future agents and retrieval](#extension-points-for-future-agents-and-retrieval)
-19. [Tech stack and licenses](#tech-stack-and-licenses)
-20. [Known limitations](#known-limitations)
-21. [Contributing posture](#contributing-posture)
+15. [Configuration notes](#configuration-notes)
+16. [Testing, linting, and type checking](#testing-linting-and-type-checking)
+17. [Extension points for future agents and retrieval](#extension-points-for-future-agents-and-retrieval)
+18. [Tech stack and licenses](#tech-stack-and-licenses)
+19. [Known limitations](#known-limitations)
+20. [Contributing posture](#contributing-posture)
 
 ---
 
@@ -100,11 +177,10 @@ Narrow protocols exist so those systems can be attached later without rewriting 
 
 ```text
 ShadowSpeakerSDE/
-├── README.md                 # This document
-├── branding/                 # Source of truth for logo + favicon
-│   ├── README.md
-│   ├── logo.svg
-│   └── favicon.svg
+├── README.md
+├── Makefile                  # install / deploy / test entrypoints
+├── scripts/check-tools.sh    # toolchain gate used by make install
+├── branding/                 # logo + favicon assets
 ├── backend/
 │   ├── pyproject.toml
 │   ├── data/projects/        # Local JSON project files (runtime)
@@ -118,43 +194,15 @@ ShadowSpeakerSDE/
 │   └── tests/
 └── frontend/
     ├── public/
-    │   ├── favicon.svg
-    │   └── branding/         # Served copies of logo + favicon
+    │   └── branding/
     ├── src/
     │   ├── api.ts
     │   ├── types.ts
     │   ├── App.tsx
     │   ├── components/       # Timeline, workspace, bins, editor
     │   └── hooks/
-    └── vite.config.ts        # Dev proxy to the API
+    └── vite.config.ts        # Dev proxy to the API (honors VITE_API_PROXY)
 ```
-
----
-
-## Branding (logo and favicon)
-
-Place and maintain brand artwork in the repository root directory:
-
-**[`branding/`](branding/)**
-
-| Asset | Path | Role |
-|-------|------|------|
-| Logo | [`branding/logo.svg`](branding/logo.svg) | Wordmark / lockup for documentation and future UI chrome |
-| Favicon | [`branding/favicon.svg`](branding/favicon.svg) | Compact mark for browser tabs |
-
-Placeholder SVGs ship with the product teal palette so the repo looks intentional before custom art arrives. To install your own artwork:
-
-1. Replace the files under `branding/`.
-2. Copy them into the frontend static folder so Vite can serve them:
-
-```bash
-cp branding/logo.svg branding/favicon.svg frontend/public/branding/
-cp branding/favicon.svg frontend/public/favicon.svg
-```
-
-3. The HTML entry already points at `/branding/favicon.svg` (see [`frontend/index.html`](frontend/index.html)).
-
-More detail lives in [`branding/README.md`](branding/README.md).
 
 ---
 
@@ -395,57 +443,28 @@ No vector database is required for this loop.
 
 ---
 
-## Getting started
-
-### Prerequisites
-
-- **Python** 3.12+ (the project declares `requires-python >= 3.12`; development has also been run successfully on newer CPython versions)
-- **Node.js** 20+ recommended (Vite 8 / modern tooling)
-- `npm` for the frontend
-
-### Backend
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-uvicorn shadowspeaker.main:app --reload --port 8000
-```
-
-API docs (OpenAPI): http://127.0.0.1:8000/docs
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open http://localhost:5173 — Vite proxies `/projects` and `/health` to the API on port 8000.
-
-### Quick smoke check
-
-```bash
-curl -s http://127.0.0.1:8000/health
-# {"status":"ok"}
-```
-
----
-
 ## Configuration notes
 
-- **Port conflicts:** If something else already binds `:8000`, start uvicorn on another port (for example `--port 8001`) and update the proxy targets in [`frontend/vite.config.ts`](frontend/vite.config.ts) to match.
-- **CORS:** The API allows the Vite origins `http://localhost:5173` and `http://127.0.0.1:5173`.
+- **Ports:** Defaults are API `8000` and UI `5173`. Override with `make deploy API_PORT=… WEB_PORT=…`. `make check-tools` warns when those ports look busy.
+- **Proxy:** `make run` / `make deploy` set `VITE_API_PROXY` for the Vite proxy in [`frontend/vite.config.ts`](frontend/vite.config.ts).
+- **CORS:** The API allows `localhost` / `127.0.0.1` with any port so alternate `WEB_PORT` values work.
 - **Data directory:** Default project files live under `backend/data/projects/`. Tests inject a temporary directory via the app factory.
 - **API base URL:** Frontend defaults to same-origin (empty `VITE_API_BASE`) so the Vite proxy works in development.
+- **Process logs:** `make deploy` writes `.run/api.log` and `.run/web.log` (gitignored).
 
 ---
 
 ## Testing, linting, and type checking
 
-### Backend
+Preferred via Make (after `make install`):
+
+```bash
+make test
+make lint
+make typecheck
+```
+
+### Backend (manual)
 
 ```bash
 cd backend
@@ -457,7 +476,7 @@ mypy src
 
 Coverage includes block discrimination, reorder/move/link integrity, persistence atomicity behavior, export determinism/separation, and agent-pack ordering / prior-continuity rules.
 
-### Frontend
+### Frontend (manual)
 
 ```bash
 cd frontend
@@ -534,7 +553,7 @@ Avoid:
 
 ## License and attribution
 
-Add a repository `LICENSE` if/when you publish the project formally. Placeholder branding assets in [`branding/`](branding/) are part of this codebase and may be replaced with your own marks at any time.
+Add a repository `LICENSE` if/when you publish the project formally.
 
 ---
 
