@@ -40,12 +40,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 type ProjectEnvelope = { project: StoryProject };
+export type ProjectSummary = { id: string; name: string };
 
 export const api = {
+  listProjects() {
+    return request<{ projects: ProjectSummary[] }>('/projects');
+  },
   createProject(name: string) {
     return request<ProjectEnvelope>('/projects', {
       method: 'POST',
       body: JSON.stringify({ name }),
+    });
+  },
+  deleteProject(projectId: string) {
+    return request<void>(`/projects/${projectId}`, {
+      method: 'DELETE',
     });
   },
   getProject(projectId: string) {
@@ -53,12 +62,22 @@ export const api = {
   },
   updateDefaults(
     projectId: string,
-    body: { point_of_view?: string; writing_style_material?: string },
+    body: {
+      point_of_view?: string;
+      writing_style_material?: string;
+      structural_devices?: string[];
+      structural_devices_custom?: string[];
+    },
   ) {
     return request<ProjectEnvelope>(`/projects/${projectId}/defaults`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
+  },
+  getReview(projectId: string) {
+    return request<{ warnings: import('./types').ReviewWarning[] }>(
+      `/projects/${projectId}/review`,
+    );
   },
   createChapter(
     projectId: string,
@@ -100,6 +119,55 @@ export const api = {
       body: JSON.stringify(body),
     });
   },
+  createPlot(
+    projectId: string,
+    body: { name: string; description?: string; chapter_ids?: string[] },
+  ) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/plots`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+  patchPlot(
+    projectId: string,
+    plotId: string,
+    body: {
+      name?: string;
+      description?: string;
+      inciting_incident?: string;
+      macguffin?: string;
+      plot_twist?: string;
+      deus_ex_machina?: string;
+    },
+  ) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/plots/${plotId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+  patchSubplot(
+    projectId: string,
+    subplotId: string,
+    body: {
+      name?: string;
+      description?: string;
+      phases?: { id: string; description: string }[];
+      inciting_incident?: string;
+      macguffin?: string;
+      plot_twist?: string;
+      deus_ex_machina?: string;
+    },
+  ) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/subplots/${subplotId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+  addSubplotPhase(projectId: string, subplotId: string) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/subplots/${subplotId}/phases`, {
+      method: 'POST',
+    });
+  },
   associateSubplot(projectId: string, subplotId: string, chapterIds: string[]) {
     return request<ProjectEnvelope>(
       `/projects/${projectId}/subplots/${subplotId}/chapters`,
@@ -108,6 +176,12 @@ export const api = {
         body: JSON.stringify({ chapter_ids: chapterIds }),
       },
     );
+  },
+  saveBlockAsTemplate(projectId: string, blockId: string, name?: string) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/blocks/${blockId}/template`, {
+      method: 'POST',
+      body: JSON.stringify({ name: name ?? null }),
+    });
   },
   createBlock(
     projectId: string,
@@ -141,6 +215,36 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+  cloneBlock(
+    projectId: string,
+    body: { block_id: string; target_chapter_id: string },
+  ) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/blocks/clone`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+  addTimelineSlots(projectId: string, count = 1) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/timeline/slots`, {
+      method: 'POST',
+      body: JSON.stringify({ count }),
+    });
+  },
+  patchTimelineSlot(projectId: string, slotId: string, body: { name?: string }) {
+    return request<ProjectEnvelope>(`/projects/${projectId}/timeline/slots/${slotId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+  paintTimelineSlot(projectId: string, slotId: string, chapterIds: string[]) {
+    return request<ProjectEnvelope>(
+      `/projects/${projectId}/timeline/slots/${slotId}/coverage`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ chapter_ids: chapterIds }),
+      },
+    );
   },
   reorderBlocks(projectId: string, chapterId: string, blockIds: string[]) {
     return request<ProjectEnvelope>(

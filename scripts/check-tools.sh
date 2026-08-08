@@ -108,34 +108,6 @@ else
   fail "curl was not found on PATH. Install curl so deploy can verify the API health endpoint."
 fi
 
-# --- Ports (soft check) ---
-header "Port availability (advisory)"
-API_PORT="${API_PORT:-8000}"
-WEB_PORT="${WEB_PORT:-5173}"
-
-port_in_use() {
-  local port="$1"
-  if command -v ss >/dev/null 2>&1; then
-    ss -ltn "( sport = :$port )" 2>/dev/null | tail -n +2 | grep -q .
-  elif command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
-  else
-    return 1
-  fi
-}
-
-if port_in_use "$API_PORT"; then
-  warn "Port $API_PORT appears to be in use. API deploy may fail — set API_PORT to a free port (e.g. make deploy API_PORT=8001)."
-else
-  ok "API port $API_PORT looks free"
-fi
-
-if port_in_use "$WEB_PORT"; then
-  warn "Port $WEB_PORT appears to be in use. Frontend deploy may fail — set WEB_PORT to a free port (e.g. make deploy WEB_PORT=5174)."
-else
-  ok "Frontend port $WEB_PORT looks free"
-fi
-
 header "Result"
 if [[ "$failures" -gt 0 ]]; then
   printf '%s%d required check(s) failed.%s Fix the items marked ✗ above, then re-run: make check-tools\n' \
@@ -144,4 +116,5 @@ if [[ "$failures" -gt 0 ]]; then
 fi
 
 printf '%sAll required tools look good.%s You can run: make install && make deploy\n' "$GREEN" "$RESET"
+printf 'Default ports are API 17325 / UI 17326. Deploy refuses to start if they are busy.\n'
 exit 0

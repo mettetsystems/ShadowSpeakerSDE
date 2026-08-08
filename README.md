@@ -43,24 +43,25 @@ make check-tools
 make deploy
 ```
 
-`deploy` runs `install` (including tool checks) and then starts the API and UI. When healthy you get:
+`deploy` runs `install` (including tool checks), then **checks that the ports are free**, and starts the API and UI. When healthy you get:
 
-- UI: http://127.0.0.1:5173
-- API: http://127.0.0.1:8000
-- OpenAPI docs: http://127.0.0.1:8000/docs
+- UI: http://127.0.0.1:17326
+- API: http://127.0.0.1:17325
+- OpenAPI docs: http://127.0.0.1:17325/docs
 
 Useful companions:
 
 ```bash
-make status   # are API/UI process files alive?
-make stop     # stop processes started by deploy/run
-make run      # start without reinstalling (after a prior install)
+make status        # are API/UI process files alive?
+make stop          # stop processes started by deploy/run
+make run           # start without reinstalling (after a prior install)
+make check-ports   # fail early if default ports are busy
 ```
 
-If the default ports are taken:
+Defaults use uncommon ports (`17325` / `17326`) to avoid colliding with typical local services. If those are taken, deploy aborts with a clear error:
 
 ```bash
-make deploy API_PORT=8001 WEB_PORT=5174
+make deploy API_PORT=18321 WEB_PORT=18322
 ```
 
 The Makefile exports `VITE_API_PROXY` so the Vite proxy tracks `API_PORT`.
@@ -85,12 +86,12 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn shadowspeaker.main:app --reload --port 8000
+uvicorn shadowspeaker.main:app --reload --port 17325
 
 # Frontend (second terminal)
 cd frontend
 npm install
-npm run dev
+npm run dev -- --port 17326
 ```
 
 ---
@@ -316,7 +317,7 @@ The application does **not** rely on an in-memory global dictionary as the sole 
 
 ## HTTP API
 
-Base URL in local development is typically `http://127.0.0.1:8000`. The Vite dev server proxies `/projects` and `/health` to that origin.
+Base URL in local development is typically `http://127.0.0.1:17325`. The Vite dev server proxies `/projects` and `/health` to that origin (via `VITE_API_PROXY` when using Make).
 
 ### Projects
 
@@ -445,7 +446,7 @@ No vector database is required for this loop.
 
 ## Configuration notes
 
-- **Ports:** Defaults are API `8000` and UI `5173`. Override with `make deploy API_PORT=… WEB_PORT=…`. `make check-tools` warns when those ports look busy.
+- **Ports:** Defaults are API `17325` and UI `17326` (chosen to avoid common local conflicts). Override with `make deploy API_PORT=… WEB_PORT=…`. `make run` / `make deploy` run `make check-ports` and **refuse to start** if either port is already listening.
 - **Proxy:** `make run` / `make deploy` set `VITE_API_PROXY` for the Vite proxy in [`frontend/vite.config.ts`](frontend/vite.config.ts).
 - **CORS:** The API allows `localhost` / `127.0.0.1` with any port so alternate `WEB_PORT` values work.
 - **Data directory:** Default project files live under `backend/data/projects/`. Tests inject a temporary directory via the app factory.
@@ -529,7 +530,7 @@ Dependency policy favors MIT / Apache-2.0 / BSD-family packages. Avoid heavy Gan
 - Within-chapter block drag reorder is intentionally simple.
 - Chapter field saves are blur/submit oriented rather than fully debounced autosave everywhere.
 - No auth, sync, or model provider is included.
-- On some developer machines port `8000` may already be occupied by unrelated local services.
+- On some developer machines common ports like `8000` / `5173` are occupied; this project defaults to `17325` / `17326` and blocks deploy when they are busy.
 
 ---
 

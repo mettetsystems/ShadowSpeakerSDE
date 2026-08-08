@@ -28,6 +28,8 @@ class ProjectRepository(Protocol):
 
     async def list_ids(self) -> list[str]: ...
 
+    async def list_summaries(self) -> list[dict[str, str]]: ...
+
 
 class ProjectStoreError(Exception):
     pass
@@ -91,6 +93,30 @@ class JsonFileProjectRepository:
             return ids
 
         return await asyncio.to_thread(_list)
+
+    async def list_summaries(self) -> list[dict[str, str]]:
+        """Return id/name pairs without failing the whole list on one bad file."""
+
+        def _summaries() -> list[dict[str, str]]:
+            rows: list[dict[str, str]] = []
+            for entry in sorted(self._root.glob("*.json")):
+                project_id = entry.stem
+                name = project_id
+                try:
+                    data = json.loads(entry.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        raw_name = data.get("name")
+                        if isinstance(raw_name, str) and raw_name.strip():
+                            name = raw_name.strip()
+                        raw_id = data.get("id")
+                        if isinstance(raw_id, str) and raw_id.strip():
+                            project_id = raw_id.strip()
+                except (OSError, json.JSONDecodeError):
+                    pass
+                rows.append({"id": project_id, "name": name})
+            return rows
+
+        return await asyncio.to_thread(_summaries)
 
     async def _lock_for(self, project_id: str) -> asyncio.Lock:
         async with self._locks_guard:

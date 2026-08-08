@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class FigurativeDevice(StrEnum):
+    METAPHOR = "metaphor"
+    SIMILE = "simile"
+    PERSONIFICATION = "personification"
+    ANTHROPOMORPHISM = "anthropomorphism"
+    HYPERBOLE = "hyperbole"
+    LITOTES = "litotes"
+    METONYMY = "metonymy"
+    SYNECDOCHE = "synecdoche"
+    OXYMORON = "oxymoron"
+    PARADOX = "paradox"
+    SENSORY_IMAGERY = "sensory_imagery"
+    SYNESTHESIA = "synesthesia"
 
 
 class BlockBase(BaseModel):
@@ -20,6 +36,7 @@ class SettingBlock(BlockBase):
     environment_state: str = ""
     description: str = ""
     micro_settings: list[str] = Field(default_factory=list)
+    juxtaposition: str = ""
 
 
 class CharacterBlock(BlockBase):
@@ -32,6 +49,7 @@ class CharacterBlock(BlockBase):
     aura: str = ""
     special_skillsets: list[str] = Field(default_factory=list)
     personalized_items: list[str] = Field(default_factory=list)
+    character_foil_id: str | None = None
 
 
 class DialogueBlock(BlockBase):
@@ -41,6 +59,12 @@ class DialogueBlock(BlockBase):
     conversation: str = ""
     # String reference for MVP — avoids a second character-management subsystem.
     character: str = ""
+    subtext: str = ""
+    fourth_wall: bool = False
+    # False = spoken / true dialogue; True = internal monologue.
+    internal_monologue: bool = False
+    overheard: bool = False
+    template_source_id: str | None = None
 
 
 class SpecialItemBlock(BlockBase):
@@ -67,13 +91,27 @@ class ToolBlock(BlockBase):
     properties: list[str] = Field(default_factory=list)
 
 
+class GroupBlock(BlockBase):
+    block_type: Literal["group"] = "group"
+    character_ids: list[str] = Field(default_factory=list)
+
+
+class ProseBuilderBlock(BlockBase):
+    block_type: Literal["prose_builder"] = "prose_builder"
+    subject: str = ""
+    figurative_devices: list[FigurativeDevice] = Field(default_factory=list)
+    figurative_devices_custom: list[str] = Field(default_factory=list)
+
+
 Block = Annotated[
     SettingBlock
     | CharacterBlock
     | DialogueBlock
     | SpecialItemBlock
     | VehicleBlock
-    | ToolBlock,
+    | ToolBlock
+    | GroupBlock
+    | ProseBuilderBlock,
     Field(discriminator="block_type"),
 ]
 
@@ -84,6 +122,8 @@ BLOCK_TYPE_LABELS: dict[str, str] = {
     "special_item": "Special Item",
     "vehicle": "Vehicle",
     "tool": "Tool",
+    "group": "Group",
+    "prose_builder": "Prose Builder",
 }
 
 DEFAULT_BLOCK_TITLES: dict[str, str] = {
@@ -93,6 +133,8 @@ DEFAULT_BLOCK_TITLES: dict[str, str] = {
     "special_item": "New Special Item",
     "vehicle": "New Vehicle",
     "tool": "New Tool",
+    "group": "New Group",
+    "prose_builder": "New Prose Builder",
 }
 
 

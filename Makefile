@@ -1,17 +1,21 @@
 # ShadowSpeakerSDE — install and local deploy via Make
 #
 # Typical flow:
-#   make check-tools   # verify Python / Node / npm / curl (and port advisories)
+#   make check-tools   # verify Python / Node / npm / curl
 #   make install       # check tools, then install backend + frontend deps
-#   make deploy        # start API + UI (runs install first)
+#   make deploy        # start API + UI (runs install + free-port checks first)
 #   make stop          # stop processes started by deploy/run
 #
 # Optional:
-#   make run           # start without reinstalling
+#   make run           # start without reinstalling (still checks ports)
+#   make check-ports   # fail if API_PORT / WEB_PORT are already listening
 #   make test          # backend + frontend tests
-#   make API_PORT=8001 WEB_PORT=5174 deploy
+#   make API_PORT=18321 WEB_PORT=18322 deploy
+#
+# Default ports are intentionally uncommon to avoid clashes with typical
+# local services (8000, 5173, etc.).
 
-.PHONY: help check-tools install install-backend install-frontend \
+.PHONY: help check-tools check-ports install install-backend install-frontend \
 	run deploy stop test lint typecheck status clean
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
@@ -19,8 +23,8 @@ BACKEND := $(ROOT)/backend
 FRONTEND := $(ROOT)/frontend
 VENV := $(BACKEND)/.venv
 PYTHON ?= python3
-API_PORT ?= 8000
-WEB_PORT ?= 5173
+API_PORT ?= 17325
+WEB_PORT ?= 17326
 PID_DIR := $(ROOT)/.run
 API_PID := $(PID_DIR)/api.pid
 WEB_PID := $(PID_DIR)/web.pid
@@ -35,6 +39,7 @@ help:
 	@echo "ShadowSpeakerSDE Make targets"
 	@echo ""
 	@echo "  make check-tools   Verify required toolchain before installing"
+	@echo "  make check-ports   Fail if API_PORT / WEB_PORT are already in use"
 	@echo "  make install       Tool check + install backend and frontend deps"
 	@echo "  make deploy        Install (if needed) and start API + UI"
 	@echo "  make run           Start API + UI without reinstalling"
@@ -45,11 +50,16 @@ help:
 	@echo "  make typecheck     Run backend mypy + frontend tsc"
 	@echo "  make clean         Remove venv, node_modules, and .run logs/pids"
 	@echo ""
-	@echo "Ports (override as needed): API_PORT=$(API_PORT) WEB_PORT=$(WEB_PORT)"
+	@echo "Default ports: API_PORT=$(API_PORT) WEB_PORT=$(WEB_PORT)"
+	@echo "Override example: make deploy API_PORT=18321 WEB_PORT=18322"
 
 check-tools:
 	@chmod +x "$(ROOT)/scripts/check-tools.sh"
 	@API_PORT="$(API_PORT)" WEB_PORT="$(WEB_PORT)" "$(ROOT)/scripts/check-tools.sh"
+
+check-ports:
+	@chmod +x "$(ROOT)/scripts/check-ports.sh"
+	@API_PORT="$(API_PORT)" WEB_PORT="$(WEB_PORT)" "$(ROOT)/scripts/check-ports.sh"
 
 install: check-tools install-backend install-frontend
 	@echo ""
@@ -71,7 +81,7 @@ install-frontend:
 
 deploy: install run
 
-run: _ensure-venv _ensure-node-modules
+run: _ensure-venv _ensure-node-modules check-ports
 	@mkdir -p "$(PID_DIR)"
 	@if [ -f "$(API_PID)" ] && kill -0 $$(cat "$(API_PID)") 2>/dev/null; then \
 		echo "API already running (pid $$(cat "$(API_PID)")). Use make stop first."; \

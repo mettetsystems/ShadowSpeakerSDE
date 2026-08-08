@@ -10,7 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from shadowspeaker.api.schemas import (
+    AddTimelineSlotsRequest,
     AssociateSubplotRequest,
+    CloneBlockRequest,
     CreateBlockLinkRequest,
     CreateBlockRequest,
     CreateChapterRequest,
@@ -18,10 +20,15 @@ from shadowspeaker.api.schemas import (
     CreateProjectRequest,
     CreateSubplotRequest,
     MoveBlockRequest,
+    PaintTimelineSlotRequest,
     PatchBlockRequest,
     PatchChapterRequest,
+    PatchPlotRequest,
+    PatchSubplotRequest,
+    PatchTimelineSlotRequest,
     ReorderBlocksRequest,
     ReorderChaptersRequest,
+    SaveBlockTemplateRequest,
     UpdateDefaultsRequest,
     dump_project,
 )
@@ -86,6 +93,11 @@ async def create_project(body: CreateProjectRequest, request: Request) -> dict[s
     return dump_project(project)
 
 
+@router.get("/projects")
+async def list_projects(request: Request) -> dict[str, Any]:
+    return {"projects": await _service(request).list_projects()}
+
+
 @router.get("/projects/{project_id}")
 async def get_project(project_id: str, request: Request) -> dict[str, Any]:
     project = await _service(request).get_project(project_id)
@@ -111,8 +123,16 @@ async def patch_defaults(
         project_id,
         point_of_view=body.point_of_view,
         writing_style_material=body.writing_style_material,
+        structural_devices=body.structural_devices,
+        structural_devices_custom=body.structural_devices_custom,
     )
     return dump_project(project)
+
+
+@router.get("/projects/{project_id}/review")
+async def get_review(project_id: str, request: Request) -> dict[str, Any]:
+    warnings = await _service(request).review_warnings(project_id)
+    return {"warnings": warnings}
 
 
 @router.delete("/projects/{project_id}")
@@ -162,11 +182,43 @@ async def create_plot(project_id: str, body: CreatePlotRequest, request: Request
     return dump_project(project)
 
 
+@router.patch("/projects/{project_id}/plots/{plot_id}")
+async def patch_plot(
+    project_id: str, plot_id: str, body: PatchPlotRequest, request: Request
+) -> dict[str, Any]:
+    project = await _service(request).update_plot(
+        project_id, plot_id, body.model_dump(exclude_unset=True)
+    )
+    return dump_project(project)
+
+
 @router.post("/projects/{project_id}/subplots")
 async def create_subplot(
     project_id: str, body: CreateSubplotRequest, request: Request
 ) -> dict[str, Any]:
     project = await _service(request).add_subplot(project_id, body.model_dump())
+    return dump_project(project)
+
+
+@router.patch("/projects/{project_id}/subplots/{subplot_id}")
+async def patch_subplot(
+    project_id: str,
+    subplot_id: str,
+    body: PatchSubplotRequest,
+    request: Request,
+) -> dict[str, Any]:
+    payload = body.model_dump(exclude_unset=True)
+    if "phases" in payload and payload["phases"] is not None:
+        payload["phases"] = [dict(item) for item in payload["phases"]]
+    project = await _service(request).update_subplot(project_id, subplot_id, payload)
+    return dump_project(project)
+
+
+@router.post("/projects/{project_id}/subplots/{subplot_id}/phases")
+async def create_subplot_phase(
+    project_id: str, subplot_id: str, request: Request
+) -> dict[str, Any]:
+    project = await _service(request).add_subplot_phase(project_id, subplot_id)
     return dump_project(project)
 
 
@@ -207,6 +259,19 @@ async def patch_block(
     return dump_project(project)
 
 
+@router.post("/projects/{project_id}/blocks/{block_id}/template")
+async def save_block_template(
+    project_id: str,
+    block_id: str,
+    body: SaveBlockTemplateRequest,
+    request: Request,
+) -> dict[str, Any]:
+    project = await _service(request).save_block_as_template(
+        project_id, block_id, name=body.name
+    )
+    return dump_project(project)
+
+
 @router.delete("/projects/{project_id}/blocks/{block_id}")
 async def remove_block(project_id: str, block_id: str, request: Request) -> dict[str, Any]:
     project = await _service(request).delete_block(project_id, block_id)
@@ -216,6 +281,48 @@ async def remove_block(project_id: str, block_id: str, request: Request) -> dict
 @router.post("/projects/{project_id}/blocks/move")
 async def move_block(project_id: str, body: MoveBlockRequest, request: Request) -> dict[str, Any]:
     project = await _service(request).move_block(project_id, body.model_dump())
+    return dump_project(project)
+
+
+@router.post("/projects/{project_id}/blocks/clone")
+async def clone_block_route(
+    project_id: str, body: CloneBlockRequest, request: Request
+) -> dict[str, Any]:
+    project = await _service(request).clone_block(project_id, body.model_dump())
+    return dump_project(project)
+
+
+@router.post("/projects/{project_id}/timeline/slots")
+async def add_timeline_slots_route(
+    project_id: str, body: AddTimelineSlotsRequest, request: Request
+) -> dict[str, Any]:
+    project = await _service(request).add_timeline_slots(project_id, body.count)
+    return dump_project(project)
+
+
+@router.patch("/projects/{project_id}/timeline/slots/{slot_id}")
+async def patch_timeline_slot_route(
+    project_id: str,
+    slot_id: str,
+    body: PatchTimelineSlotRequest,
+    request: Request,
+) -> dict[str, Any]:
+    project = await _service(request).update_timeline_slot(
+        project_id, slot_id, body.model_dump(exclude_unset=True)
+    )
+    return dump_project(project)
+
+
+@router.post("/projects/{project_id}/timeline/slots/{slot_id}/coverage")
+async def paint_timeline_slot_route(
+    project_id: str,
+    slot_id: str,
+    body: PaintTimelineSlotRequest,
+    request: Request,
+) -> dict[str, Any]:
+    project = await _service(request).paint_timeline_slot(
+        project_id, slot_id, body.chapter_ids
+    )
     return dump_project(project)
 
 

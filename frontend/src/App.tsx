@@ -9,22 +9,54 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { useMemo, useState, type FormEvent } from 'react';
-import { api } from './api';
+import { api, type ProjectSummary } from './api';
 import { BlockBins } from './components/BlockBins';
 import { BlockEditor } from './components/BlockEditor';
 import { ChapterWorkspace } from './components/ChapterWorkspace';
+import { DeleteProjectDialog } from './components/DeleteProjectDialog';
+import { PlotPanel } from './components/PlotPanel';
+import { ReviewPanel } from './components/ReviewPanel';
+import { SubplotPanel } from './components/SubplotPanel';
 import { Timeline } from './components/Timeline';
+import {
+  CollapsiblePanelHeader,
+  useCollapsiblePanel,
+} from './components/CollapsiblePanel';
 import { useProjectWorkspace } from './hooks/useProjectWorkspace';
-import { POINT_OF_VIEWS, orderedChapters, type NarrativePointOfView } from './types';
+import {
+  POINT_OF_VIEWS,
+  STRUCTURAL_DEVICES,
+  orderedChapters,
+  type NarrativePointOfView,
+  type ReviewWarning,
+  type StructuralDevice,
+} from './types';
+import { findChapterForBlock, reorderSettingSequence } from './chapterBlocks';
 import './App.css';
 
 export default function App() {
-  const { project, ui, setUi, createProject, reload, mutate } = useProjectWorkspace();
+  const {
+    project,
+    projects,
+    lastProjectId,
+    ui,
+    setUi,
+    createProject,
+    deleteProject,
+    openProject,
+    closeProject,
+    reload,
+    mutate,
+  } = useProjectWorkspace();
   const [projectName, setProjectName] = useState('Harbor Lights');
   const [chapterTitle, setChapterTitle] = useState('');
   const [chapterSubtitle, setChapterSubtitle] = useState('');
   const [subplotName, setSubplotName] = useState('');
+  const [plotName, setPlotName] = useState('');
   const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
+  const [reviewWarnings, setReviewWarnings] = useState<ReviewWarning[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<ProjectSummary | null>(null);
+  const controlsPanel = useCollapsiblePanel(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -32,6 +64,16 @@ export default function App() {
     if (!project || !ui.selectedBlockId) return null;
     return project.blocks[ui.selectedBlockId] ?? null;
   }, [project, ui.selectedBlockId]);
+
+  const selectedSubplot = useMemo(() => {
+    if (!project || !ui.selectedSubplotId) return null;
+    return project.subplots.find((item) => item.id === ui.selectedSubplotId) ?? null;
+  }, [project, ui.selectedSubplotId]);
+
+  const selectedPlot = useMemo(() => {
+    if (!project || !ui.selectedPlotId) return null;
+    return project.plots.find((item) => item.id === ui.selectedPlotId) ?? null;
+  }, [project, ui.selectedPlotId]);
 
   async function handleCreateProject(event: FormEvent) {
     event.preventDefault();
@@ -55,13 +97,54 @@ export default function App() {
     event.preventDefault();
     if (!project || !subplotName.trim()) return;
     const chapterIds = orderedChapters(project).map((chapter) => chapter.id);
-    await mutate((id) =>
+    const previousIds = new Set(project.subplots.map((subplot) => subplot.id));
+    const next = await mutate((id) =>
       api.createSubplot(id, {
         name: subplotName.trim(),
         chapter_ids: chapterIds,
       }),
     );
     setSubplotName('');
+    if (next) {
+      const created = next.subplots.find((subplot) => !previousIds.has(subplot.id));
+      if (created) {
+        setUi((prev) => ({ ...prev, selectedSubplotId: created.id }));
+      }
+    }
+  }
+
+  async function handleAddPlot(event: FormEvent) {
+    event.preventDefault();
+    if (!project || !plotName.trim()) return;
+    const chapterIds = orderedChapters(project).map((chapter) => chapter.id);
+    const previousIds = new Set(project.plots.map((plot) => plot.id));
+    const next = await mutate((id) =>
+      api.createPlot(id, {
+        name: plotName.trim(),
+        chapter_ids: chapterIds,
+      }),
+    );
+    setPlotName('');
+    if (next) {
+      const created = next.plots.find((plot) => !previousIds.has(plot.id));
+      if (created) {
+        setUi((prev) => ({ ...prev, selectedPlotId: created.id }));
+      }
+    }
+  }
+
+  async function openReview() {
+    if (!project) return;
+    try {
+      const result = await api.getReview(project.id);
+      setReviewWarnings(result.warnings);
+      setUi((prev) => ({ ...prev, showReview: true }));
+    } catch (err) {
+      setUi((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Could not load review',
+      }));
+    }
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -138,6 +221,20 @@ export default function App() {
     await mutate((id) => api.reorderChapters(id, next.map((chapter) => chapter.id)));
   }
 
+  if (ui.bootstrapping) {
+    return (
+      <div className="app shell">
+        <header className="brand-bar">
+          <div>
+            <p className="eyebrow">Story Development Environment</p>
+            <h1>ShadowSpeakerSDE</h1>
+            <p className="lede">Loading saved projects…</p>
+          </div>
+        </header>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div className="app shell">
@@ -151,6 +248,46 @@ export default function App() {
             </p>
           </div>
         </header>
+        <section className="project-list" aria-label="Saved projects">
+          <h2>Saved projects</h2>
+          {projects.length === 0 ? (
+            <p className="empty">
+              No saved projects yet. Create one below — it will be stored locally under{' '}
+              <code>backend/data/projects/</code> and appear here after reload.
+            </p>
+          ) : (
+            <ul>
+              {projects.map((item) => {
+                const isLast = item.id === lastProjectId;
+                return (
+                  <li key={item.id} className="project-row">
+                    <button
+                      type="button"
+                      className={`project-open${isLast ? ' recent' : ''}`}
+                      disabled={ui.busy}
+                      onClick={() => void openProject(item.id)}
+                    >
+                      <span className="project-open-name">
+                        {item.name}
+                        {isLast ? <span className="pill recent-pill">Recent</span> : null}
+                      </span>
+                      <span className="muted project-open-id">{item.id}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost project-delete"
+                      disabled={ui.busy}
+                      aria-label={`Delete ${item.name}`}
+                      onClick={() => setPendingDelete(item)}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
         <form className="start-form" onSubmit={handleCreateProject}>
           <label>
             Project name
@@ -165,6 +302,17 @@ export default function App() {
           </button>
           {ui.error ? <p className="error">{ui.error}</p> : null}
         </form>
+        {pendingDelete ? (
+          <DeleteProjectDialog
+            project={pendingDelete}
+            busy={ui.busy}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={async () => {
+              const ok = await deleteProject(pendingDelete.id);
+              if (ok) setPendingDelete(null);
+            }}
+          />
+        ) : null}
       </div>
     );
   }
@@ -183,6 +331,12 @@ export default function App() {
             <h1>{project.name}</h1>
           </div>
           <div className="toolbar">
+            <button type="button" className="secondary" onClick={() => void closeProject()} disabled={ui.busy}>
+              Projects
+            </button>
+            <button type="button" className="secondary" onClick={() => void openReview()} disabled={ui.busy}>
+              Review
+            </button>
             <button type="button" className="secondary" onClick={() => void reload()} disabled={ui.busy}>
               Reload
             </button>
@@ -203,7 +357,17 @@ export default function App() {
 
         {ui.error ? <p className="error banner">{ui.error}</p> : null}
 
-        <section className="controls-row">
+        <section
+          className={`controls-row${controlsPanel.open ? '' : ' panel-collapsed'}`}
+          aria-label="Story controls"
+        >
+          <CollapsiblePanelHeader
+            title="Story controls"
+            open={controlsPanel.open}
+            onToggle={controlsPanel.toggle}
+          />
+          {controlsPanel.open ? (
+            <div className="controls-row-body">
           <form className="inline-form" onSubmit={handleAddChapter}>
             <input
               placeholder="Chapter title"
@@ -228,6 +392,37 @@ export default function App() {
             />
             <button type="submit">Add subplot across chapters</button>
           </form>
+          <form className="inline-form" onSubmit={handleAddPlot}>
+            <input
+              placeholder="Plot name"
+              value={plotName}
+              onChange={(event) => setPlotName(event.target.value)}
+              aria-label="Plot name"
+            />
+            <button type="submit">Add plot</button>
+          </form>
+          {project.plots.length > 0 ? (
+            <label className="inline-form">
+              Open plot
+              <select
+                aria-label="Open plot"
+                value={ui.selectedPlotId ?? ''}
+                onChange={(event) =>
+                  setUi((prev) => ({
+                    ...prev,
+                    selectedPlotId: event.target.value || null,
+                  }))
+                }
+              >
+                <option value="">Select plot…</option>
+                {project.plots.map((plot) => (
+                  <option key={plot.id} value={plot.id}>
+                    {plot.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="inline-form">
             Default POV
             <select
@@ -239,11 +434,83 @@ export default function App() {
             >
               {POINT_OF_VIEWS.map((value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {value.replace(/_/g, ' ')}
                 </option>
               ))}
             </select>
           </label>
+          <fieldset className="inline-form multi-select structural-devices">
+            <legend>Structural devices</legend>
+            {STRUCTURAL_DEVICES.map((device) => {
+              const selected = (project.narrative_defaults.structural_devices ?? []).includes(
+                device.value,
+              );
+              return (
+                <label key={device.value} className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => {
+                      const current = project.narrative_defaults.structural_devices ?? [];
+                      const next = selected
+                        ? current.filter((item) => item !== device.value)
+                        : [...current, device.value];
+                      void mutate((id) =>
+                        api.updateDefaults(id, {
+                          structural_devices: next as StructuralDevice[],
+                        }),
+                      );
+                    }}
+                  />
+                  {device.label}
+                </label>
+              );
+            })}
+            <label>
+              Custom structural device
+              <input
+                aria-label="Custom structural device"
+                placeholder="Add custom and press Enter"
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  const value = event.currentTarget.value.trim();
+                  if (!value) return;
+                  const current = project.narrative_defaults.structural_devices_custom ?? [];
+                  if (current.includes(value)) return;
+                  void mutate((id) =>
+                    api.updateDefaults(id, {
+                      structural_devices_custom: [...current, value],
+                    }),
+                  );
+                  event.currentTarget.value = '';
+                }}
+              />
+            </label>
+            {(project.narrative_defaults.structural_devices_custom ?? []).length > 0 ? (
+              <ul className="chip-list">
+                {(project.narrative_defaults.structural_devices_custom ?? []).map((item) => (
+                  <li key={item}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        void mutate((id) =>
+                          api.updateDefaults(id, {
+                            structural_devices_custom: (
+                              project.narrative_defaults.structural_devices_custom ?? []
+                            ).filter((entry) => entry !== item),
+                          }),
+                        )
+                      }
+                    >
+                      {item} ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </fieldset>
           <label className="inline-form grow">
             Writing style material
             <input
@@ -259,13 +526,32 @@ export default function App() {
               }}
             />
           </label>
+            </div>
+          ) : null}
         </section>
 
         <Timeline
           project={project}
           selectedChapterId={ui.selectedChapterId}
+          selectedSubplotId={ui.selectedSubplotId}
+          selectedBlockId={ui.selectedBlockId}
           onSelectChapter={(chapterId) =>
             setUi((prev) => ({ ...prev, selectedChapterId: chapterId }))
+          }
+          onSelectSubplot={(subplotId) =>
+            setUi((prev) => ({ ...prev, selectedSubplotId: subplotId }))
+          }
+          onSelectBlock={(blockId) =>
+            setUi((prev) => ({ ...prev, selectedBlockId: blockId }))
+          }
+          onAddSlots={(count = 1) =>
+            void mutate((id) => api.addTimelineSlots(id, count))
+          }
+          onRenameSlot={(slotId, name) =>
+            void mutate((id) => api.patchTimelineSlot(id, slotId, { name }))
+          }
+          onPaintCoverage={(slotId, chapterIds) =>
+            void mutate((id) => api.paintTimelineSlot(id, slotId, chapterIds))
           }
         />
 
@@ -312,6 +598,37 @@ export default function App() {
                 }),
               )
             }
+            onCloneBlock={(blockId, targetChapterId) =>
+              void mutate((id) =>
+                api.cloneBlock(id, {
+                  block_id: blockId,
+                  target_chapter_id: targetChapterId,
+                }),
+              )
+            }
+            onDeleteBlock={(blockId) => {
+              void (async () => {
+                await mutate((id) => api.deleteBlock(id, blockId));
+                setUi((prev) => ({
+                  ...prev,
+                  selectedBlockId: prev.selectedBlockId === blockId ? null : prev.selectedBlockId,
+                  linkSourceBlockId:
+                    prev.linkSourceBlockId === blockId ? null : prev.linkSourceBlockId,
+                }));
+              })();
+            }}
+            onSetSettingSequence={(chapterId, blockId, sequence) => {
+              const chapter = project.chapters.find((item) => item.id === chapterId);
+              if (!chapter) return;
+              const nextIds = reorderSettingSequence(
+                chapter,
+                project.blocks,
+                blockId,
+                sequence,
+              );
+              if (!nextIds || nextIds.join() === chapter.block_ids.join()) return;
+              void mutate((id) => api.reorderBlocks(id, chapterId, nextIds));
+            }}
           />
 
           <BlockBins
@@ -328,6 +645,7 @@ export default function App() {
           {selectedBlock ? (
             <BlockEditor
               block={selectedBlock}
+              project={project}
               linkHint={
                 ui.linkSourceBlockId
                   ? ui.linkSourceBlockId === selectedBlock.id
@@ -348,8 +666,67 @@ export default function App() {
               onSave={(patch) => {
                 void mutate((id) => api.patchBlock(id, selectedBlock.id, patch));
               }}
+              onSaveAsTemplate={() => {
+                void mutate((id) => api.saveBlockAsTemplate(id, selectedBlock.id));
+              }}
               onDelete={() =>
                 void mutate((id) => api.deleteBlock(id, selectedBlock.id))
+              }
+              onSetSettingSequence={(blockId, sequence) => {
+                const chapter = findChapterForBlock(project, blockId);
+                if (!chapter) return;
+                const nextIds = reorderSettingSequence(
+                  chapter,
+                  project.blocks,
+                  blockId,
+                  sequence,
+                );
+                if (!nextIds || nextIds.join() === chapter.block_ids.join()) return;
+                void mutate((id) => api.reorderBlocks(id, chapter.id, nextIds));
+              }}
+            />
+          ) : null}
+
+          {selectedSubplot ? (
+            <SubplotPanel
+              subplot={selectedSubplot}
+              onClose={() => setUi((prev) => ({ ...prev, selectedSubplotId: null }))}
+              onSave={(patch) => {
+                void mutate((id) => api.patchSubplot(id, selectedSubplot.id, patch));
+              }}
+              onAddPhase={() => {
+                void mutate((id) => api.addSubplotPhase(id, selectedSubplot.id));
+              }}
+            />
+          ) : null}
+
+          {selectedPlot ? (
+            <PlotPanel
+              plot={selectedPlot}
+              onClose={() => setUi((prev) => ({ ...prev, selectedPlotId: null }))}
+              onSave={(patch) => {
+                void mutate((id) => api.patchPlot(id, selectedPlot.id, patch));
+              }}
+            />
+          ) : null}
+
+          {ui.showReview ? (
+            <ReviewPanel
+              warnings={reviewWarnings}
+              onClose={() => setUi((prev) => ({ ...prev, showReview: false }))}
+              onSelectChapter={(chapterId) =>
+                setUi((prev) => ({
+                  ...prev,
+                  selectedChapterId: chapterId,
+                  showReview: false,
+                }))
+              }
+              onSelectBlock={(blockId) =>
+                setUi((prev) => ({
+                  ...prev,
+                  selectedBlockId: blockId,
+                  showReview: false,
+                }))
               }
             />
           ) : null}

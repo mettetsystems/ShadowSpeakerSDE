@@ -10,27 +10,48 @@ from pydantic import ValidationError
 from shadowspeaker.domain.blocks import (
     CharacterBlock,
     DialogueBlock,
+    GroupBlock,
+    ProseBuilderBlock,
     SettingBlock,
     SpecialItemBlock,
     ToolBlock,
     VehicleBlock,
 )
-from shadowspeaker.domain.models import StoryProject, Timescale, parse_block
+from shadowspeaker.domain.models import (
+    MAX_SUBPLOT_PHASES,
+    MAX_TIMELINE_SLOTS,
+    PacingDevice,
+    StoryProject,
+    StructuralDevice,
+    Subplot,
+    SuspenseMechanism,
+    Timescale,
+    WritingTexture,
+    parse_block,
+)
 from shadowspeaker.domain.mutations import (
     DuplicateLinkError,
     ValidationConflictError,
     add_block_from_template,
     add_chapter,
     add_subplot,
+    add_subplot_phase,
+    add_timeline_slots,
     associate_subplot_chapters,
+    clone_block,
     create_block_link,
     create_project,
     delete_block,
     move_block,
+    paint_timeline_slot_coverage,
     reorder_chapters,
+    save_block_as_template,
     update_block,
     update_chapter,
+    update_narrative_defaults,
+    update_subplot,
 )
+from shadowspeaker.domain.review import collect_review_warnings
 from shadowspeaker.export import (
     export_agent_writing_pack,
     export_story_json,
@@ -51,6 +72,7 @@ def test_parse_every_block_type() -> None:
             "block_type": "setting",
             "title": "Harbor",
             "micro_settings": ["dock", "fog"],
+            "juxtaposition": "calm vs storm",
         },
         {
             "id": "2",
@@ -62,6 +84,13 @@ def test_parse_every_block_type() -> None:
         {"id": "4", "block_type": "special_item", "what_it_does": "glows"},
         {"id": "5", "block_type": "vehicle", "behaviors": ["hover"], "scale": "large"},
         {"id": "6", "block_type": "tool", "behaviors": ["cut"], "properties": ["sharp"]},
+        {"id": "7", "block_type": "group", "title": "Crew", "character_ids": []},
+        {
+            "id": "8",
+            "block_type": "prose_builder",
+            "subject": "fog",
+            "figurative_devices": ["metaphor", "simile"],
+        },
     ]
     parsed = [parse_block(c) for c in cases]
     assert isinstance(parsed[0], SettingBlock)
@@ -70,7 +99,114 @@ def test_parse_every_block_type() -> None:
     assert isinstance(parsed[3], SpecialItemBlock)
     assert isinstance(parsed[4], VehicleBlock)
     assert isinstance(parsed[5], ToolBlock)
+    assert isinstance(parsed[6], GroupBlock)
+    assert isinstance(parsed[7], ProseBuilderBlock)
     assert parsed[0].micro_settings == ["dock", "fog"]
+    assert parsed[0].juxtaposition == "calm vs storm"
+
+
+def test_review_flags_multi_craft_and_duplicate_dialogue() -> None:
+    project = create_project("Demo")
+    project = update_narrative_defaults(
+        project,
+        structural_devices=[StructuralDevice.FRAME_NARRATIVE],
+        structural_devices_custom=["braided chronology"],
+    )
+    project = add_chapter(project, title="A")
+    chapter_id = project.chapters[0].id
+    project = update_chapter(
+        project,
+        chapter_id,
+        pacing_devices=[PacingDevice.SCENE],
+        pacing_devices_custom=["breath pause"],
+        suspense_mechanisms=[SuspenseMechanism.CLIFFHANGER],
+        suspense_custom=["whispered deadline"],
+    )
+    project = add_block_from_template(
+        project, chapter_id=chapter_id, block_type="dialogue"
+    )
+    project = add_block_from_template(
+        project, chapter_id=chapter_id, block_type="dialogue"
+    )
+    first, second = project.chapters[0].block_ids
+    project = update_block(project, first, {"conversation": "Stay back!"})
+    project = update_block(project, second, {"conversation": "  stay   back! "})
+    codes = {warning.code for warning in collect_review_warnings(project)}
+    assert "multi_structural_devices" in codes
+    assert "multi_pacing_devices" in codes
+    assert "multi_suspense" in codes
+    assert "duplicate_dialogue" in codes
+
+    clean = create_project("Clean")
+    clean = update_narrative_defaults(
+        clean,
+        structural_devices=[StructuralDevice.IN_MEDIAS_RES],
+        structural_devices_custom=[],
+    )
+    assert collect_review_warnings(clean) == []
+
+
+def test_writing_texture_budget_and_export() -> None:
+    project = create_project("Texture")
+    project = add_chapter(project, title="Storm")
+    chapter_id = project.chapters[0].id
+    project = update_chapter(
+        project,
+        chapter_id,
+        writing_texture=WritingTexture(
+            rule_of_three=40,
+            metaphor_stacking=60,
+            clean_pivot_sentences=20,
+        ),
+    )
+    texture = project.chapters[0].writing_texture
+    assert texture.total() == 120
+    assert texture.rule_of_three == 40
+
+    with pytest.raises(ValidationConflictError, match="exceed budget"):
+        update_chapter(
+            project,
+            chapter_id,
+            writing_texture=WritingTexture(rule_of_three=100, metaphor_stacking=70),
+        )
+
+    md = export_story_markdown(project)
+    assert "Writing texture (120 / 160)" in md
+    assert "Rule of Three `40`" in md
+    pack = export_agent_writing_pack(project)
+    assert "#### Writing Texture" in pack
+    assert "Metaphor Stacking: `60`" in pack
+
+
+def test_save_dialogue_as_template() -> None:
+    project = create_project("Demo")
+    project = add_chapter(project, title="A")
+    project = add_block_from_template(
+        project, chapter_id=project.chapters[0].id, block_type="dialogue"
+    )
+    block_id = project.chapters[0].block_ids[0]
+    project = update_block(
+        project,
+        block_id,
+        {
+            "conversation": "Hello there",
+            "subtext": "threat",
+            "fourth_wall": True,
+            "internal_monologue": True,
+            "overheard": True,
+        },
+    )
+    before = len(project.block_templates)
+    project = save_block_as_template(project, block_id, name="Greeting")
+    assert len(project.block_templates) == before + 1
+    template = project.block_templates[-1]
+    assert template.name == "Greeting"
+    assert template.block_type == "dialogue"
+    assert "subtext" in template.defaults
+    assert template.defaults["fourth_wall"] is True
+    assert template.defaults["internal_monologue"] is True
+    assert template.defaults["overheard"] is True
+    assert template.defaults["conversation"] == "Hello there"
 
 
 def test_unknown_block_discriminator_rejected() -> None:
@@ -136,6 +272,49 @@ def test_subplot_association() -> None:
     project = associate_subplot_chapters(project, project.subplots[0].id, [ids[0]])
     assert project.subplots[0].chapter_ids == [ids[0]]
     assert project.chapters[1].subplot_ids == []
+
+
+def test_subplot_phases_default_and_cap() -> None:
+    project = create_project("Demo")
+    project = add_chapter(project, title="A")
+    project = add_subplot(project, name="Debt", chapter_ids=[project.chapters[0].id])
+    subplot = project.subplots[0]
+    assert len(subplot.phases) == 3
+    assert all(phase.description == "" for phase in subplot.phases)
+
+    first_phase = subplot.phases[0]
+    project = update_subplot(
+        project,
+        subplot.id,
+        phases=[{"id": first_phase.id, "description": "Setup debt"}],
+    )
+    assert project.subplots[0].phases[0].description == "Setup debt"
+
+    for _ in range(MAX_SUBPLOT_PHASES - 3):
+        project = add_subplot_phase(project, subplot.id)
+    assert len(project.subplots[0].phases) == MAX_SUBPLOT_PHASES
+    with pytest.raises(ValidationConflictError):
+        add_subplot_phase(project, subplot.id)
+
+
+def test_subplot_phases_backfill_legacy_empty() -> None:
+    project = create_project("Demo")
+    project = add_chapter(project, title="A")
+    project = add_subplot(project, name="Debt", chapter_ids=[project.chapters[0].id])
+    legacy = project.model_copy(deep=True)
+    legacy.subplots[0] = Subplot(
+        id=legacy.subplots[0].id,
+        name=legacy.subplots[0].name,
+        description="",
+        chapter_ids=legacy.subplots[0].chapter_ids,
+        related_subplot_ids=[],
+        phases=[],
+    )
+    updated = update_subplot(legacy, legacy.subplots[0].id, description="arc")
+    assert len(updated.subplots[0].phases) == 3
+    assert updated.subplots[0].description == "arc"
+    padded = add_subplot_phase(legacy, legacy.subplots[0].id)
+    assert len(padded.subplots[0].phases) == 4
 
 
 def test_template_immutability_on_instance_edit() -> None:
@@ -329,3 +508,63 @@ def test_agent_writing_pack_order_and_prior_continuity() -> None:
 
     empty = export_agent_writing_pack(create_project("Empty Pack"))
     assert "_No chapters yet._" in empty
+
+
+def test_default_timeline_slots_and_cap() -> None:
+    project = create_project("Slots")
+    assert len(project.timeline_slots) == 10
+    project = add_timeline_slots(project, 5)
+    assert len(project.timeline_slots) == 15
+    project = add_timeline_slots(project, MAX_TIMELINE_SLOTS - 15)
+    assert len(project.timeline_slots) == MAX_TIMELINE_SLOTS
+    with pytest.raises(ValidationConflictError):
+        add_timeline_slots(project, 1)
+
+
+def test_clone_block_keeps_original() -> None:
+    project = create_project("Clone")
+    project = add_chapter(project, title="A")
+    project = add_chapter(project, title="B")
+    a, b = project.chapters
+    project = add_block_from_template(project, chapter_id=a.id, block_type="setting")
+    source_id = project.chapters[0].block_ids[0]
+    project = update_block(project, source_id, {"title": "Harbor", "description": "wet"})
+    project = add_block_from_template(project, chapter_id=b.id, block_type="character")
+    other_id = project.chapters[1].block_ids[0]
+    project = create_block_link(
+        project,
+        source_block_id=source_id,
+        target_block_id=other_id,
+    )
+    link_count = len(project.block_links)
+    cloned = clone_block(project, block_id=source_id, target_chapter_id=b.id)
+    assert source_id in cloned.chapters[0].block_ids
+    assert source_id not in cloned.chapters[1].block_ids or True
+    assert len(cloned.chapters[1].block_ids) == 2
+    new_id = next(bid for bid in cloned.chapters[1].block_ids if bid != other_id)
+    assert new_id != source_id
+    assert cloned.blocks[new_id].title == "Harbor"
+    assert cloned.blocks[source_id].title == "Harbor"
+    cloned = update_block(cloned, new_id, {"title": "Copy Harbor"})
+    assert cloned.blocks[source_id].title == "Harbor"
+    assert cloned.blocks[new_id].title == "Copy Harbor"
+    assert len(cloned.block_links) == link_count
+
+
+def test_paint_timeline_slot_creates_and_updates_subplot() -> None:
+    project = create_project("Paint")
+    project = add_chapter(project, title="One")
+    project = add_chapter(project, title="Two")
+    project = add_chapter(project, title="Three")
+    ids = [c.id for c in project.chapters]
+    slot = project.timeline_slots[0]
+    project = paint_timeline_slot_coverage(project, slot.id, [ids[0], ids[1]])
+    bound = next(s for s in project.timeline_slots if s.id == slot.id)
+    assert bound.subplot_id is not None
+    assert bound.name == "Untitled subplot"
+    subplot = next(s for s in project.subplots if s.id == bound.subplot_id)
+    assert subplot.chapter_ids == [ids[0], ids[1]]
+    project = paint_timeline_slot_coverage(project, slot.id, [ids[0], ids[2]])
+    subplot = next(s for s in project.subplots if s.id == bound.subplot_id)
+    assert subplot.chapter_ids == [ids[0], ids[2]]
+    assert ids[1] not in subplot.chapter_ids

@@ -6,20 +6,33 @@ import copy
 import uuid
 from typing import Any
 
+from pydantic import ValidationError
+
 from shadowspeaker.domain.blocks import (
     BLOCK_TYPE_LABELS,
     DEFAULT_BLOCK_TITLES,
     empty_block_payload,
 )
 from shadowspeaker.domain.models import (
+    DEFAULT_SUBPLOT_PHASES,
+    DEFAULT_TIMELINE_SLOTS,
+    MAX_SUBPLOT_PHASES,
+    MAX_TIMELINE_SLOTS,
+    WRITING_TEXTURE_BUDGET,
     BlockLink,
     BlockTemplate,
     Chapter,
     NarrativePointOfView,
+    PacingDevice,
     Plot,
     StoryProject,
+    StructuralDevice,
     Subplot,
+    SubplotPhase,
+    SuspenseMechanism,
+    TimelineSlot,
     Timescale,
+    WritingTexture,
     parse_block,
 )
 
@@ -58,12 +71,40 @@ def default_block_templates() -> list[BlockTemplate]:
     return templates
 
 
+def default_timeline_slots(count: int = DEFAULT_TIMELINE_SLOTS) -> list[TimelineSlot]:
+    return [TimelineSlot(id=_new_id("slot")) for _ in range(count)]
+
+
+def default_subplot_phases(count: int = DEFAULT_SUBPLOT_PHASES) -> list[SubplotPhase]:
+    return [SubplotPhase(id=_new_id("ph")) for _ in range(count)]
+
+
+def _ensure_subplot_phases(subplot: Subplot) -> None:
+    """Pad legacy/empty phase lists up to the default of 3 (in place)."""
+    while len(subplot.phases) < DEFAULT_SUBPLOT_PHASES:
+        subplot.phases.append(SubplotPhase(id=_new_id("ph")))
+
+
 def create_project(name: str, project_id: str | None = None) -> StoryProject:
     return StoryProject(
         id=project_id or _new_id("proj"),
         name=name.strip() or "Untitled Story",
         block_templates=default_block_templates(),
+        timeline_slots=default_timeline_slots(),
     )
+
+
+def _clean_custom_strings(items: list[str] | None) -> list[str]:
+    if not items:
+        return []
+    cleaned: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        value = item.strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return cleaned
 
 
 def update_narrative_defaults(
@@ -71,6 +112,8 @@ def update_narrative_defaults(
     *,
     point_of_view: NarrativePointOfView | None = None,
     writing_style_material: str | None = None,
+    structural_devices: list[StructuralDevice] | None = None,
+    structural_devices_custom: list[str] | None = None,
 ) -> StoryProject:
     updated = project.model_copy(deep=True)
     defaults = updated.narrative_defaults.model_copy()
@@ -79,6 +122,10 @@ def update_narrative_defaults(
     if writing_style_material is not None:
         defaults.writing_style_material = writing_style_material
         updated.writing_style_material = writing_style_material
+    if structural_devices is not None:
+        defaults.structural_devices = list(dict.fromkeys(structural_devices))
+    if structural_devices_custom is not None:
+        defaults.structural_devices_custom = _clean_custom_strings(structural_devices_custom)
     updated.narrative_defaults = defaults
     return updated
 
@@ -125,6 +172,12 @@ def update_chapter(
     subplot_ids: list[str] | None = None,
     continuity_summary: str | None = None,
     draft_prose: str | None = None,
+    pacing_devices: list[PacingDevice] | None = None,
+    pacing_devices_custom: list[str] | None = None,
+    syntactic_pacing_notes: str | None = None,
+    suspense_mechanisms: list[SuspenseMechanism] | None = None,
+    suspense_custom: list[str] | None = None,
+    writing_texture: WritingTexture | dict[str, Any] | None = None,
 ) -> StoryProject:
     updated = project.model_copy(deep=True)
     chapter = _require_chapter(updated, chapter_id)
@@ -147,6 +200,32 @@ def update_chapter(
         chapter.continuity_summary = continuity_summary
     if draft_prose is not None:
         chapter.draft_prose = draft_prose
+    if pacing_devices is not None:
+        chapter.pacing_devices = list(dict.fromkeys(pacing_devices))
+    if pacing_devices_custom is not None:
+        chapter.pacing_devices_custom = _clean_custom_strings(pacing_devices_custom)
+    if syntactic_pacing_notes is not None:
+        chapter.syntactic_pacing_notes = syntactic_pacing_notes
+    if suspense_mechanisms is not None:
+        chapter.suspense_mechanisms = list(dict.fromkeys(suspense_mechanisms))
+    if suspense_custom is not None:
+        chapter.suspense_custom = _clean_custom_strings(suspense_custom)
+    if writing_texture is not None:
+        try:
+            texture = (
+                writing_texture
+                if isinstance(writing_texture, WritingTexture)
+                else WritingTexture.model_validate(writing_texture)
+            )
+        except ValidationError as exc:
+            detail = "; ".join(error["msg"] for error in exc.errors())
+            raise ValidationConflictError(detail) from exc
+        if texture.total() > WRITING_TEXTURE_BUDGET:
+            raise ValidationConflictError(
+                f"Writing texture points ({texture.total()}) exceed "
+                f"budget of {WRITING_TEXTURE_BUDGET}"
+            )
+        chapter.writing_texture = texture
     if subplot_ids is not None:
         known = {s.id for s in updated.subplots}
         missing = [sid for sid in subplot_ids if sid not in known]
@@ -218,6 +297,37 @@ def add_plot(
     return updated
 
 
+def update_plot(
+    project: StoryProject,
+    plot_id: str,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    inciting_incident: str | None = None,
+    macguffin: str | None = None,
+    plot_twist: str | None = None,
+    deus_ex_machina: str | None = None,
+) -> StoryProject:
+    updated = project.model_copy(deep=True)
+    plot = _require_plot(updated, plot_id)
+    if name is not None:
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValidationConflictError("Plot name is required")
+        plot.name = cleaned
+    if description is not None:
+        plot.description = description
+    if inciting_incident is not None:
+        plot.inciting_incident = inciting_incident
+    if macguffin is not None:
+        plot.macguffin = macguffin
+    if plot_twist is not None:
+        plot.plot_twist = plot_twist
+    if deus_ex_machina is not None:
+        plot.deus_ex_machina = deus_ex_machina
+    return updated
+
+
 def add_subplot(
     project: StoryProject,
     *,
@@ -243,11 +353,65 @@ def add_subplot(
         description=description,
         chapter_ids=list(dict.fromkeys(ids)),
         related_subplot_ids=list(dict.fromkeys(related)),
+        phases=default_subplot_phases(),
     )
     updated.subplots.append(subplot)
     for chapter in updated.chapters:
         if chapter.id in subplot.chapter_ids and subplot.id not in chapter.subplot_ids:
             chapter.subplot_ids.append(subplot.id)
+    return updated
+
+
+def update_subplot(
+    project: StoryProject,
+    subplot_id: str,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    phases: list[dict[str, Any]] | None = None,
+    inciting_incident: str | None = None,
+    macguffin: str | None = None,
+    plot_twist: str | None = None,
+    deus_ex_machina: str | None = None,
+) -> StoryProject:
+    updated = project.model_copy(deep=True)
+    subplot = _require_subplot(updated, subplot_id)
+    _ensure_subplot_phases(subplot)
+    if name is not None:
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValidationConflictError("Subplot name is required")
+        subplot.name = cleaned
+    if description is not None:
+        subplot.description = description
+    if phases is not None:
+        by_id = {phase.id: phase for phase in subplot.phases}
+        for item in phases:
+            phase_id = item.get("id")
+            if not isinstance(phase_id, str) or phase_id not in by_id:
+                raise NotFoundError(f"Subplot phase not found: {phase_id}")
+            if "description" in item:
+                by_id[phase_id].description = str(item.get("description") or "")
+    if inciting_incident is not None:
+        subplot.inciting_incident = inciting_incident
+    if macguffin is not None:
+        subplot.macguffin = macguffin
+    if plot_twist is not None:
+        subplot.plot_twist = plot_twist
+    if deus_ex_machina is not None:
+        subplot.deus_ex_machina = deus_ex_machina
+    return updated
+
+
+def add_subplot_phase(project: StoryProject, subplot_id: str) -> StoryProject:
+    updated = project.model_copy(deep=True)
+    subplot = _require_subplot(updated, subplot_id)
+    _ensure_subplot_phases(subplot)
+    if len(subplot.phases) >= MAX_SUBPLOT_PHASES:
+        raise ValidationConflictError(
+            f"Cannot exceed {MAX_SUBPLOT_PHASES} subplot phases"
+        )
+    subplot.phases.append(SubplotPhase(id=_new_id("ph")))
     return updated
 
 
@@ -304,6 +468,10 @@ def add_block_from_template(
         payload["block_type"] = block_type
 
     block = parse_block(payload)
+    if template is not None and block_type == "dialogue":
+        data = block.model_dump()
+        data["template_source_id"] = template.id
+        block = parse_block(data)
     updated.blocks[block.id] = block
     chapter.block_ids.append(block.id)
     return updated
@@ -319,8 +487,43 @@ def update_block(project: StoryProject, block_id: str, patch: dict[str, Any]) ->
     for key, value in patch.items():
         if key in forbidden:
             continue
+        if key == "figurative_devices_custom" and isinstance(value, list):
+            data[key] = _clean_custom_strings([str(item) for item in value])
+            continue
         data[key] = value
-    updated.blocks[block_id] = parse_block(data)
+    block = parse_block(data)
+    _validate_block_refs(updated, block)
+    updated.blocks[block_id] = block
+    return updated
+
+
+def save_block_as_template(
+    project: StoryProject,
+    block_id: str,
+    *,
+    name: str | None = None,
+) -> StoryProject:
+    updated = project.model_copy(deep=True)
+    block = updated.blocks.get(block_id)
+    if block is None:
+        raise NotFoundError(f"Block not found: {block_id}")
+    defaults = block.model_dump(mode="json")
+    defaults.pop("id", None)
+    defaults.pop("block_type", None)
+    defaults.pop("template_source_id", None)
+    template_name = (
+        name or block.title or BLOCK_TYPE_LABELS.get(block.block_type, "Template")
+    ).strip()
+    if not template_name:
+        template_name = f"{BLOCK_TYPE_LABELS.get(block.block_type, 'Block')} template"
+    updated.block_templates.append(
+        BlockTemplate(
+            id=_new_id("tpl"),
+            name=template_name,
+            block_type=block.block_type,
+            defaults=defaults,
+        )
+    )
     return updated
 
 
@@ -361,6 +564,91 @@ def move_block(
     target.block_ids = [b for b in target.block_ids if b != block_id]
     target.block_ids.insert(insert_at, block_id)
     return updated
+
+
+def clone_block(
+    project: StoryProject,
+    *,
+    block_id: str,
+    target_chapter_id: str,
+    new_block_id: str | None = None,
+) -> StoryProject:
+    """Duplicate a block into another chapter; original and links stay put."""
+    updated = project.model_copy(deep=True)
+    existing = updated.blocks.get(block_id)
+    if existing is None:
+        raise NotFoundError(f"Block not found: {block_id}")
+    target = _require_chapter(updated, target_chapter_id)
+    payload = existing.model_dump()
+    payload["id"] = new_block_id or _new_id("blk")
+    cloned = parse_block(payload)
+    updated.blocks[cloned.id] = cloned
+    target.block_ids.append(cloned.id)
+    return updated
+
+
+def add_timeline_slots(project: StoryProject, count: int = 1) -> StoryProject:
+    if count < 1:
+        raise ValidationConflictError("count must be at least 1")
+    updated = project.model_copy(deep=True)
+    remaining = MAX_TIMELINE_SLOTS - len(updated.timeline_slots)
+    if remaining <= 0:
+        raise ValidationConflictError(
+            f"Timeline already has the maximum of {MAX_TIMELINE_SLOTS} rows"
+        )
+    if count > remaining:
+        raise ValidationConflictError(
+            f"Cannot add {count} rows; only {remaining} remaining (max {MAX_TIMELINE_SLOTS})"
+        )
+    updated.timeline_slots.extend(default_timeline_slots(count))
+    return updated
+
+
+def update_timeline_slot(
+    project: StoryProject,
+    slot_id: str,
+    *,
+    name: str | None = None,
+) -> StoryProject:
+    updated = project.model_copy(deep=True)
+    slot = _require_timeline_slot(updated, slot_id)
+    if name is not None:
+        slot.name = name.strip()
+        if slot.subplot_id:
+            subplot = next((s for s in updated.subplots if s.id == slot.subplot_id), None)
+            if subplot is not None and slot.name:
+                subplot.name = slot.name
+    return updated
+
+
+def paint_timeline_slot_coverage(
+    project: StoryProject,
+    slot_id: str,
+    chapter_ids: list[str],
+) -> StoryProject:
+    """Set chapter coverage for a slot; create/bind subplot when named coverage appears."""
+    updated = project.model_copy(deep=True)
+    slot = _require_timeline_slot(updated, slot_id)
+    _assert_chapters_exist(updated, chapter_ids)
+    unique = list(dict.fromkeys(chapter_ids))
+
+    if slot.subplot_id is None:
+        if not unique:
+            return updated
+        label = slot.name.strip() or "Untitled subplot"
+        if not slot.name.strip():
+            slot.name = label
+        updated = add_subplot(
+            updated,
+            name=label,
+            chapter_ids=unique,
+        )
+        slot = _require_timeline_slot(updated, slot_id)
+        slot.subplot_id = updated.subplots[-1].id
+        slot.name = label
+        return updated
+
+    return associate_subplot_chapters(updated, slot.subplot_id, unique)
 
 
 def reorder_blocks_in_chapter(
@@ -432,11 +720,42 @@ def _require_chapter(project: StoryProject, chapter_id: str) -> Chapter:
     raise NotFoundError(f"Chapter not found: {chapter_id}")
 
 
+def _require_plot(project: StoryProject, plot_id: str) -> Plot:
+    for plot in project.plots:
+        if plot.id == plot_id:
+            return plot
+    raise NotFoundError(f"Plot not found: {plot_id}")
+
+
 def _require_subplot(project: StoryProject, subplot_id: str) -> Subplot:
     for subplot in project.subplots:
         if subplot.id == subplot_id:
             return subplot
     raise NotFoundError(f"Subplot not found: {subplot_id}")
+
+
+def _require_timeline_slot(project: StoryProject, slot_id: str) -> TimelineSlot:
+    for slot in project.timeline_slots:
+        if slot.id == slot_id:
+            return slot
+    raise NotFoundError(f"Timeline slot not found: {slot_id}")
+
+
+def _validate_block_refs(project: StoryProject, block: Any) -> None:
+    block_type = getattr(block, "block_type", None)
+    if block_type == "character":
+        foil_id = getattr(block, "character_foil_id", None)
+        if foil_id:
+            foil = project.blocks.get(foil_id)
+            if foil is None or foil.block_type not in {"character", "group"}:
+                raise NotFoundError(f"Character foil target not found: {foil_id}")
+            if foil_id == block.id:
+                raise ValidationConflictError("Character cannot be its own foil")
+    if block_type == "group":
+        for character_id in getattr(block, "character_ids", []):
+            member = project.blocks.get(character_id)
+            if member is None or member.block_type != "character":
+                raise NotFoundError(f"Group character not found: {character_id}")
 
 
 def _assert_chapters_exist(project: StoryProject, chapter_ids: list[str]) -> None:

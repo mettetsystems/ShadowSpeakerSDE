@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Protocol
 
 from shadowspeaker.domain.blocks import BLOCK_TYPE_LABELS, Block
-from shadowspeaker.domain.models import StoryProject
+from shadowspeaker.domain.models import Chapter, Plot, StoryProject, Subplot
+from shadowspeaker.domain.review import collect_review_warnings
 
 
 class StoryContextExporter(Protocol):
@@ -32,8 +33,22 @@ def export_story_markdown(project: StoryProject) -> str:
     lines.append(f"# {project.name}")
     lines.append("")
     lines.append("## Narrative Defaults")
-    lines.append(f"- Point of view: `{project.narrative_defaults.point_of_view.value}`")
+    pov = project.narrative_defaults.point_of_view.value
+    lines.append(f"- Point of view: `{pov}`")
+    structural = list(project.narrative_defaults.structural_devices)
+    structural_custom = project.narrative_defaults.structural_devices_custom
+    if structural or structural_custom:
+        devices = [d.value for d in structural]
+        devices.extend(structural_custom)
+        lines.append(f"- Structural devices: `{', '.join(devices)}`")
     lines.append("")
+
+    warnings = collect_review_warnings(project)
+    if warnings:
+        lines.append("## Review Warnings")
+        for warning in warnings:
+            lines.append(f"- [{warning.code}] {warning.message}")
+        lines.append("")
 
     if project.plots:
         lines.append("## Plots")
@@ -41,6 +56,7 @@ def export_story_markdown(project: StoryProject) -> str:
             lines.append(f"### {plot.name}")
             if plot.description:
                 lines.append(plot.description)
+            _append_plot_craft(lines, plot)
             if plot.chapter_ids:
                 titles = _chapter_titles(project, plot.chapter_ids)
                 lines.append(f"- Chapters: {', '.join(titles)}")
@@ -52,6 +68,11 @@ def export_story_markdown(project: StoryProject) -> str:
             lines.append(f"### {subplot.name}")
             if subplot.description:
                 lines.append(subplot.description)
+            _append_plot_craft(lines, subplot)
+            if subplot.phases:
+                for index, phase in enumerate(subplot.phases, start=1):
+                    if phase.description.strip():
+                        lines.append(f"- Phase {index}: {phase.description.strip()}")
             if subplot.chapter_ids:
                 titles = _chapter_titles(project, subplot.chapter_ids)
                 lines.append(f"- Chapters: {', '.join(titles)}")
@@ -72,6 +93,16 @@ def export_story_markdown(project: StoryProject) -> str:
         lines.append(f"- Timescale: `{chapter.timescale.value}`")
         if chapter.point_of_view_override is not None:
             lines.append(f"- POV override: `{chapter.point_of_view_override.value}`")
+        if chapter.pacing_devices or chapter.pacing_devices_custom:
+            devices = [d.value for d in chapter.pacing_devices]
+            devices.extend(chapter.pacing_devices_custom)
+            lines.append(f"- Pacing devices: `{', '.join(devices)}`")
+        if chapter.syntactic_pacing_notes.strip():
+            lines.append(f"- Syntactic pacing notes: {chapter.syntactic_pacing_notes.strip()}")
+        if chapter.suspense_mechanisms or chapter.suspense_custom:
+            parts = [m.value for m in chapter.suspense_mechanisms] + list(chapter.suspense_custom)
+            lines.append(f"- Suspense mechanisms: {', '.join(parts)}")
+        _append_writing_texture(lines, chapter)
         if chapter.subplot_ids:
             names = _subplot_names(project, chapter.subplot_ids)
             lines.append(f"- Associated subplots: {', '.join(names)}")
@@ -169,8 +200,22 @@ def export_agent_writing_pack(project: StoryProject) -> str:
     lines.append(style if style else "_No writing-style material defined._")
     lines.append("")
     lines.append("### Narrative Defaults")
-    lines.append(f"- Point of view: `{project.narrative_defaults.point_of_view.value}`")
+    pov = project.narrative_defaults.point_of_view.value
+    lines.append(f"- Point of view: `{pov}`")
+    structural = list(project.narrative_defaults.structural_devices)
+    structural_custom = project.narrative_defaults.structural_devices_custom
+    if structural or structural_custom:
+        devices = [d.value for d in structural]
+        devices.extend(structural_custom)
+        lines.append(f"- Structural devices: `{', '.join(devices)}`")
     lines.append("")
+
+    warnings = collect_review_warnings(project)
+    if warnings:
+        lines.append("### Review Warnings")
+        for warning in warnings:
+            lines.append(f"- [{warning.code}] {warning.message}")
+        lines.append("")
 
     lines.append("### Plots and Subplots")
     if not project.plots and not project.subplots:
@@ -181,6 +226,7 @@ def export_agent_writing_pack(project: StoryProject) -> str:
             lines.append(f"#### Plot: {plot.name}")
             if plot.description:
                 lines.append(plot.description)
+            _append_plot_craft(lines, plot)
             if plot.chapter_ids:
                 titles = _chapter_titles(project, plot.chapter_ids)
                 lines.append(f"- Chapters: {', '.join(titles)}")
@@ -192,6 +238,11 @@ def export_agent_writing_pack(project: StoryProject) -> str:
             lines.append(f"#### Subplot: {subplot.name}")
             if subplot.description:
                 lines.append(subplot.description)
+            _append_plot_craft(lines, subplot)
+            if subplot.phases:
+                for index, phase in enumerate(subplot.phases, start=1):
+                    if phase.description.strip():
+                        lines.append(f"- Phase {index}: {phase.description.strip()}")
             if subplot.chapter_ids:
                 titles = _chapter_titles(project, subplot.chapter_ids)
                 lines.append(f"- Chapters: {', '.join(titles)}")
@@ -266,6 +317,21 @@ def export_agent_writing_pack(project: StoryProject) -> str:
                 lines.append(f"- Associated subplots: {', '.join(names)}")
             lines.append("")
 
+            lines.append("#### Writing Texture")
+            texture = chapter.writing_texture
+            if texture.total() == 0:
+                lines.append(
+                    "_No writing-texture points assigned — keep literary flourishes restrained._"
+                )
+            else:
+                lines.append(
+                    f"Density budget for a ~3000–4000 word chapter "
+                    f"(`{texture.total()} / 160` points assigned). Constrain prose flourishes "
+                    "to these weighted techniques:"
+                )
+                _append_writing_texture(lines, chapter, compact=False)
+            lines.append("")
+
             lines.append("#### Local Blocks")
             if not chapter.block_ids:
                 lines.append("_No blocks in this chapter._")
@@ -332,6 +398,56 @@ class MarkdownStoryContextExporter:
 class PlainWritingStyleExporter:
     def export(self, project: StoryProject) -> str:
         return export_writing_style(project)
+
+
+def _append_plot_craft(lines: list[str], item: Plot | Subplot) -> None:
+    if item.inciting_incident.strip():
+        lines.append(f"- Inciting incident: {item.inciting_incident.strip()}")
+    if item.macguffin.strip():
+        lines.append(f"- MacGuffin: {item.macguffin.strip()}")
+    if item.plot_twist.strip():
+        lines.append(f"- Plot twist: {item.plot_twist.strip()}")
+    if item.deus_ex_machina.strip():
+        lines.append(f"- Deus ex machina: {item.deus_ex_machina.strip()}")
+
+
+_WRITING_TEXTURE_LABELS = {
+    "rule_of_three": "Rule of Three",
+    "emotional_flatlining": "Emotional Flatlining",
+    "metaphor_stacking": "Metaphor Stacking",
+    "list_rhythm_stacking": "List Rhythm Stacking",
+    "subject_x_vs_subject_y": "Subject X vs Subject Y contrast",
+    "metaphor_with_personification": "Metaphor with Personification",
+    "clean_pivot_sentences": "Clean Pivot Sentences",
+    "over_dramatic_metaphor": "Over Dramatic Metaphor",
+    "emotional_shorthand_stacking": "Emotional Short-hand stacking",
+}
+
+
+def _append_writing_texture(
+    lines: list[str],
+    chapter: Chapter,
+    *,
+    compact: bool = True,
+) -> None:
+    texture = chapter.writing_texture
+    assigned = [
+        (field, int(getattr(texture, field)))
+        for field in _WRITING_TEXTURE_LABELS
+        if int(getattr(texture, field)) > 0
+    ]
+    if not assigned:
+        return
+    if compact:
+        parts = [
+            f"{_WRITING_TEXTURE_LABELS[field]} `{value}`" for field, value in assigned
+        ]
+        lines.append(
+            f"- Writing texture ({texture.total()} / 160): {', '.join(parts)}"
+        )
+        return
+    for field, value in assigned:
+        lines.append(f"- {_WRITING_TEXTURE_LABELS[field]}: `{value}`")
 
 
 def _append_block_fields(lines: list[str], block: Block) -> None:
