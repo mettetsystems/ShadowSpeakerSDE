@@ -69,17 +69,20 @@ def collect_review_warnings(project: StoryProject) -> list[ReviewWarning]:
     for block_id, block in project.blocks.items():
         if block.block_type != "dialogue":
             continue
-        conversation = getattr(block, "conversation", "") or ""
-        normalized = normalize_dialogue(conversation)
-        if not normalized:
-            continue
-        by_text.setdefault(normalized, []).append(block_id)
+        for line in getattr(block, "lines", []) or []:
+            conversation = getattr(line, "conversation", "") or ""
+            normalized = normalize_dialogue(conversation)
+            if not normalized:
+                continue
+            by_text.setdefault(normalized, []).append(block_id)
 
     for block_ids in by_text.values():
-        if len(block_ids) < 2:
+        # Same text can appear once per block; flag only when shared across blocks.
+        unique_blocks = list(dict.fromkeys(block_ids))
+        if len(unique_blocks) < 2:
             continue
         titles = []
-        for block_id in block_ids:
+        for block_id in unique_blocks:
             block = project.blocks[block_id]
             titles.append(block.title or block_id)
         warnings.append(
@@ -89,7 +92,7 @@ def collect_review_warnings(project: StoryProject) -> list[ReviewWarning]:
                     "Duplicate dialogue conversation found across blocks: "
                     + ", ".join(titles)
                 ),
-                block_id=block_ids[0],
+                block_id=unique_blocks[0],
             )
         )
 

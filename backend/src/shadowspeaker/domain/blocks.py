@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class FigurativeDevice(StrEnum):
@@ -37,6 +37,10 @@ class SettingBlock(BlockBase):
     description: str = ""
     micro_settings: list[str] = Field(default_factory=list)
     juxtaposition: str = ""
+    # Stable shade for timeline chips; clones copy this so scene returns match.
+    color_variant: int = Field(default=0, ge=0)
+    # Characters present in this setting/scene (refs to character block ids).
+    character_ids: list[str] = Field(default_factory=list)
 
 
 class CharacterBlock(BlockBase):
@@ -52,19 +56,69 @@ class CharacterBlock(BlockBase):
     character_foil_id: str | None = None
 
 
-class DialogueBlock(BlockBase):
-    block_type: Literal["dialogue"] = "dialogue"
+class DialogueLine(BaseModel):
+    """One beat in a dialogue script table."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    character_id: str | None = None
+    # Legacy free-text speaker name when no character_id is linked.
+    character_label: str = ""
+    conversation: str = ""
     emotional_state: str = ""
     volume: str = ""
-    conversation: str = ""
-    # String reference for MVP — avoids a second character-management subsystem.
-    character: str = ""
     subtext: str = ""
-    fourth_wall: bool = False
+    # Stage business: ticks, micro-expressions, gestures, etc.
+    action: str = ""
     # False = spoken / true dialogue; True = internal monologue.
     internal_monologue: bool = False
     overheard: bool = False
+    fourth_wall: bool = False
+
+
+_LEGACY_DIALOGUE_FIELDS = (
+    "character",
+    "conversation",
+    "emotional_state",
+    "volume",
+    "subtext",
+    "fourth_wall",
+    "internal_monologue",
+    "overheard",
+)
+
+
+class DialogueBlock(BlockBase):
+    block_type: Literal["dialogue"] = "dialogue"
+    lines: list[DialogueLine] = Field(default_factory=list)
     template_source_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_flat_fields(cls, data: Any) -> Any:
+        """Fold pre-script flat dialogue fields into a single line."""
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        lines = payload.get("lines")
+        has_lines = isinstance(lines, list) and len(lines) > 0
+        if not has_lines and any(key in payload for key in _LEGACY_DIALOGUE_FIELDS):
+            payload["lines"] = [
+                {
+                    "character_label": str(payload.get("character") or ""),
+                    "conversation": str(payload.get("conversation") or ""),
+                    "emotional_state": str(payload.get("emotional_state") or ""),
+                    "volume": str(payload.get("volume") or ""),
+                    "subtext": str(payload.get("subtext") or ""),
+                    "action": "",
+                    "internal_monologue": bool(payload.get("internal_monologue") or False),
+                    "overheard": bool(payload.get("overheard") or False),
+                    "fourth_wall": bool(payload.get("fourth_wall") or False),
+                }
+            ]
+        for key in _LEGACY_DIALOGUE_FIELDS:
+            payload.pop(key, None)
+        return payload
 
 
 class SpecialItemBlock(BlockBase):
@@ -147,8 +201,11 @@ def empty_block_payload(
     resolved_title = (
         title if title is not None else DEFAULT_BLOCK_TITLES.get(block_type, "New Block")
     )
-    return {
+    payload: dict[str, object] = {
         "id": block_id,
         "block_type": block_type,
         "title": resolved_title,
     }
+    if block_type == "dialogue":
+        payload["lines"] = [{}]
+    return payload

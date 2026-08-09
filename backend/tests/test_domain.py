@@ -31,6 +31,7 @@ from shadowspeaker.domain.models import (
 )
 from shadowspeaker.domain.mutations import (
     DuplicateLinkError,
+    NotFoundError,
     ValidationConflictError,
     add_block_from_template,
     add_chapter,
@@ -96,6 +97,9 @@ def test_parse_every_block_type() -> None:
     assert isinstance(parsed[0], SettingBlock)
     assert isinstance(parsed[1], CharacterBlock)
     assert isinstance(parsed[2], DialogueBlock)
+    assert len(parsed[2].lines) == 1
+    assert parsed[2].lines[0].character_label == "Mara"
+    assert parsed[2].lines[0].conversation == "Hello"
     assert isinstance(parsed[3], SpecialItemBlock)
     assert isinstance(parsed[4], VehicleBlock)
     assert isinstance(parsed[5], ToolBlock)
@@ -129,8 +133,12 @@ def test_review_flags_multi_craft_and_duplicate_dialogue() -> None:
         project, chapter_id=chapter_id, block_type="dialogue"
     )
     first, second = project.chapters[0].block_ids
-    project = update_block(project, first, {"conversation": "Stay back!"})
-    project = update_block(project, second, {"conversation": "  stay   back! "})
+    project = update_block(project, first, {
+        "lines": [{"conversation": "Stay back!", "character_label": "A"}],
+    })
+    project = update_block(project, second, {
+        "lines": [{"conversation": "  stay   back! ", "character_label": "B"}],
+    })
     codes = {warning.code for warning in collect_review_warnings(project)}
     assert "multi_structural_devices" in codes
     assert "multi_pacing_devices" in codes
@@ -189,11 +197,16 @@ def test_save_dialogue_as_template() -> None:
         project,
         block_id,
         {
-            "conversation": "Hello there",
-            "subtext": "threat",
-            "fourth_wall": True,
-            "internal_monologue": True,
-            "overheard": True,
+            "lines": [
+                {
+                    "conversation": "Hello there",
+                    "subtext": "threat",
+                    "action": "jaw tick",
+                    "fourth_wall": True,
+                    "internal_monologue": True,
+                    "overheard": True,
+                }
+            ],
         },
     )
     before = len(project.block_templates)
@@ -202,11 +215,44 @@ def test_save_dialogue_as_template() -> None:
     template = project.block_templates[-1]
     assert template.name == "Greeting"
     assert template.block_type == "dialogue"
-    assert "subtext" in template.defaults
-    assert template.defaults["fourth_wall"] is True
-    assert template.defaults["internal_monologue"] is True
-    assert template.defaults["overheard"] is True
-    assert template.defaults["conversation"] == "Hello there"
+    assert "lines" in template.defaults
+    line = template.defaults["lines"][0]
+    assert line["subtext"] == "threat"
+    assert line["action"] == "jaw tick"
+    assert line["fourth_wall"] is True
+    assert line["internal_monologue"] is True
+    assert line["overheard"] is True
+    assert line["conversation"] == "Hello there"
+
+
+def test_dialogue_character_must_be_in_same_chapter() -> None:
+    project = create_project("Cast")
+    project = add_chapter(project, title="A")
+    project = add_chapter(project, title="B")
+    a, b = project.chapters
+    project = add_block_from_template(project, chapter_id=a.id, block_type="character")
+    project = add_block_from_template(project, chapter_id=b.id, block_type="dialogue")
+    character_id = project.chapters[0].block_ids[0]
+    dialogue_id = project.chapters[1].block_ids[0]
+    with pytest.raises(ValidationConflictError):
+        update_block(
+            project,
+            dialogue_id,
+            {"lines": [{"character_id": character_id, "conversation": "Hi"}]},
+        )
+    project = add_block_from_template(project, chapter_id=b.id, block_type="character")
+    local_character = next(
+        bid
+        for bid in project.chapters[1].block_ids
+        if project.blocks[bid].block_type == "character"
+    )
+    project = update_block(
+        project,
+        dialogue_id,
+        {"lines": [{"character_id": local_character, "conversation": "Hi", "action": "nod"}]},
+    )
+    assert project.blocks[dialogue_id].lines[0].character_id == local_character
+    assert project.blocks[dialogue_id].lines[0].action == "nod"
 
 
 def test_unknown_block_discriminator_rejected() -> None:
@@ -519,6 +565,47 @@ def test_default_timeline_slots_and_cap() -> None:
     assert len(project.timeline_slots) == MAX_TIMELINE_SLOTS
     with pytest.raises(ValidationConflictError):
         add_timeline_slots(project, 1)
+
+
+def test_setting_color_variant_assigns_and_clones_preserve() -> None:
+    project = create_project("Shades")
+    project = add_chapter(project, title="A")
+    chapter_id = project.chapters[0].id
+    project = add_block_from_template(project, chapter_id=chapter_id, block_type="setting")
+    first_id = project.chapters[0].block_ids[0]
+    assert project.blocks[first_id].color_variant == 0
+    project = add_block_from_template(project, chapter_id=chapter_id, block_type="setting")
+    second_id = project.chapters[0].block_ids[1]
+    assert project.blocks[second_id].color_variant == 1
+    project = clone_block(project, block_id=first_id, target_chapter_id=chapter_id)
+    clone_id = project.chapters[0].block_ids[-1]
+    assert project.blocks[clone_id].color_variant == 0
+    project = save_block_as_template(project, first_id, name="Harbor tpl")
+    template = next(t for t in project.block_templates if t.name == "Harbor tpl")
+    assert "color_variant" not in template.defaults
+
+
+def test_setting_accepts_character_ids() -> None:
+    project = create_project("Cast")
+    project = add_chapter(project, title="A")
+    chapter_id = project.chapters[0].id
+    project = add_block_from_template(project, chapter_id=chapter_id, block_type="character")
+    project = add_block_from_template(project, chapter_id=chapter_id, block_type="setting")
+    character_id = next(
+        bid
+        for bid in project.chapters[0].block_ids
+        if project.blocks[bid].block_type == "character"
+    )
+    setting_id = next(
+        bid
+        for bid in project.chapters[0].block_ids
+        if project.blocks[bid].block_type == "setting"
+    )
+    project = update_block(project, character_id, {"title": "Joseph Lefonte"})
+    project = update_block(project, setting_id, {"character_ids": [character_id]})
+    assert project.blocks[setting_id].character_ids == [character_id]
+    with pytest.raises(NotFoundError):
+        update_block(project, setting_id, {"character_ids": ["missing"]})
 
 
 def test_clone_block_keeps_original() -> None:

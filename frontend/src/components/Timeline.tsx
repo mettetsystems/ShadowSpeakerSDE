@@ -4,8 +4,8 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { StoryProject, TimelineSlot } from '../types';
-import { BLOCK_TYPE_LABELS, orderedChapters } from '../types';
+import type { StoryBlock, StoryProject, TimelineSlot } from '../types';
+import { BLOCK_TYPE_LABELS, orderedChapters, settingShadeIndex } from '../types';
 import { chapterBlocks } from '../chapterBlocks';
 import {
   chapterIndexFromRatio,
@@ -20,6 +20,14 @@ import {
 import { CollapsiblePanelHeader, useCollapsiblePanel } from './CollapsiblePanel';
 
 const MAX_SLOTS = 100;
+
+/** Mid shade for non-setting chips; settings use their stable color_variant. */
+function timelineChipShade(block: StoryBlock): number {
+  if (block.block_type === 'setting') {
+    return settingShadeIndex(block.color_variant);
+  }
+  return 3;
+}
 
 interface TimelineProps {
   project: StoryProject;
@@ -121,18 +129,26 @@ export function Timeline({
                       {chapterBlocks(chapter, project.blocks).length === 0 ? (
                         <li className="muted timeline-block-empty">No blocks</li>
                       ) : (
-                        chapterBlocks(chapter, project.blocks).map((block) => (
-                          <li key={block.id}>
-                            <button
-                              type="button"
-                              className={`timeline-block-chip${selectedBlockId === block.id ? ' selected' : ''}`}
-                              onClick={() => onSelectBlock?.(block.id)}
-                            >
-                              <span className="muted">{BLOCK_TYPE_LABELS[block.block_type]}</span>
-                              <span>{block.title || 'Untitled'}</span>
-                            </button>
-                          </li>
-                        ))
+                        chapterBlocks(chapter, project.blocks).map((block) => {
+                          const typeLabel = BLOCK_TYPE_LABELS[block.block_type];
+                          const title = block.title || 'Untitled';
+                          return (
+                            <li key={block.id}>
+                              <button
+                                type="button"
+                                className={`timeline-block-chip${selectedBlockId === block.id ? ' selected' : ''}`}
+                                data-block-type={block.block_type}
+                                data-shade={timelineChipShade(block)}
+                                aria-label={`${typeLabel}: ${title}`}
+                                title={`${typeLabel}: ${title}`}
+                                onClick={() => onSelectBlock?.(block.id)}
+                              >
+                                <span className="timeline-chip-type">{typeLabel}</span>
+                                <span className="timeline-chip-title">{title}</span>
+                              </button>
+                            </li>
+                          );
+                        })
                       )}
                     </ul>
                   </div>

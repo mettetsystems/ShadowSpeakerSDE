@@ -3,11 +3,11 @@
 # Typical flow:
 #   make check-tools   # verify Python / Node / npm / curl
 #   make install       # check tools, then install backend + frontend deps
-#   make deploy        # start API + UI (runs install + free-port checks first)
-#   make stop          # stop processes started by deploy/run
+#   make deploy        # start API + UI (runs install, frees ports, then starts)
+#   make stop          # stop deploy processes and free API/UI ports
 #
 # Optional:
-#   make run           # start without reinstalling (still checks ports)
+#   make run           # start without reinstalling (still frees ports first)
 #   make check-ports   # fail if API_PORT / WEB_PORT are already listening
 #   make test          # backend + frontend tests
 #   make API_PORT=18321 WEB_PORT=18322 deploy
@@ -41,9 +41,9 @@ help:
 	@echo "  make check-tools   Verify required toolchain before installing"
 	@echo "  make check-ports   Fail if API_PORT / WEB_PORT are already in use"
 	@echo "  make install       Tool check + install backend and frontend deps"
-	@echo "  make deploy        Install (if needed) and start API + UI"
-	@echo "  make run           Start API + UI without reinstalling"
-	@echo "  make stop          Stop API + UI started by deploy/run"
+	@echo "  make deploy        Install (if needed), free ports, and start API + UI"
+	@echo "  make run           Free ports, then start API + UI without reinstalling"
+	@echo "  make stop          Stop API + UI and free their ports (pid files + fuser)"
 	@echo "  make status        Show whether API/UI process files exist"
 	@echo "  make test          Run backend and frontend tests"
 	@echo "  make lint          Run backend ruff + frontend oxlint"
@@ -81,16 +81,10 @@ install-frontend:
 
 deploy: install run
 
-run: _ensure-venv _ensure-node-modules check-ports
+# Always free the configured ports before bind checks so redeploy works even when
+# earlier runs left orphan listeners and lost .run/*.pid files.
+run: _ensure-venv _ensure-node-modules stop check-ports
 	@mkdir -p "$(PID_DIR)"
-	@if [ -f "$(API_PID)" ] && kill -0 $$(cat "$(API_PID)") 2>/dev/null; then \
-		echo "API already running (pid $$(cat "$(API_PID)")). Use make stop first."; \
-		exit 1; \
-	fi
-	@if [ -f "$(WEB_PID)" ] && kill -0 $$(cat "$(WEB_PID)") 2>/dev/null; then \
-		echo "Frontend already running (pid $$(cat "$(WEB_PID)")). Use make stop first."; \
-		exit 1; \
-	fi
 	@echo "→ Starting API on http://127.0.0.1:$(API_PORT)"
 	@cd "$(BACKEND)" && nohup .venv/bin/uvicorn shadowspeaker.main:app --host 127.0.0.1 --port "$(API_PORT)" \
 		> "$(API_LOG)" 2>&1 & echo $$! > "$(API_PID)"
@@ -124,8 +118,6 @@ stop:
 		pid=$$(cat "$(API_PID)"); \
 		if kill -0 $$pid 2>/dev/null; then kill $$pid 2>/dev/null || true; echo "Stopped API ($$pid)"; fi; \
 		rm -f "$(API_PID)"; \
-	else \
-		echo "No API pid file."; \
 	fi
 	@if [ -f "$(WEB_PID)" ]; then \
 		pid=$$(cat "$(WEB_PID)"); \
@@ -135,9 +127,20 @@ stop:
 			echo "Stopped frontend ($$pid)"; \
 		fi; \
 		rm -f "$(WEB_PID)"; \
-	else \
-		echo "No frontend pid file."; \
 	fi
+	@if command -v fuser >/dev/null 2>&1; then \
+		if fuser "$(API_PORT)/tcp" >/dev/null 2>&1; then \
+			fuser -k "$(API_PORT)/tcp" >/dev/null 2>&1 || true; \
+			echo "Freed API port $(API_PORT)"; \
+		fi; \
+		if fuser "$(WEB_PORT)/tcp" >/dev/null 2>&1; then \
+			fuser -k "$(WEB_PORT)/tcp" >/dev/null 2>&1 || true; \
+			echo "Freed UI port $(WEB_PORT)"; \
+		fi; \
+	else \
+		echo "fuser not found; skipped port cleanup for $(API_PORT)/$(WEB_PORT)."; \
+	fi
+	@sleep 0.4
 
 status:
 	@if [ -f "$(API_PID)" ] && kill -0 $$(cat "$(API_PID)") 2>/dev/null; then \

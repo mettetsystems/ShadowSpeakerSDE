@@ -472,6 +472,12 @@ def add_block_from_template(
         data = block.model_dump()
         data["template_source_id"] = template.id
         block = parse_block(data)
+    if block_type == "setting":
+        data = block.model_dump()
+        # Fresh instances get the next shade in this chapter; clones keep theirs.
+        data["color_variant"] = _next_setting_color_variant(updated, chapter)
+        block = parse_block(data)
+    _validate_block_refs(updated, block)
     updated.blocks[block.id] = block
     chapter.block_ids.append(block.id)
     return updated
@@ -511,6 +517,8 @@ def save_block_as_template(
     defaults.pop("id", None)
     defaults.pop("block_type", None)
     defaults.pop("template_source_id", None)
+    # Chapter-local timeline shade should not bake into reusable templates.
+    defaults.pop("color_variant", None)
     template_name = (
         name or block.title or BLOCK_TYPE_LABELS.get(block.block_type, "Template")
     ).strip()
@@ -741,6 +749,13 @@ def _require_timeline_slot(project: StoryProject, slot_id: str) -> TimelineSlot:
     raise NotFoundError(f"Timeline slot not found: {slot_id}")
 
 
+def _chapter_holding_block(project: StoryProject, block_id: str) -> Chapter | None:
+    for chapter in project.chapters:
+        if block_id in chapter.block_ids:
+            return chapter
+    return None
+
+
 def _validate_block_refs(project: StoryProject, block: Any) -> None:
     block_type = getattr(block, "block_type", None)
     if block_type == "character":
@@ -751,11 +766,39 @@ def _validate_block_refs(project: StoryProject, block: Any) -> None:
                 raise NotFoundError(f"Character foil target not found: {foil_id}")
             if foil_id == block.id:
                 raise ValidationConflictError("Character cannot be its own foil")
-    if block_type == "group":
+    if block_type in {"group", "setting"}:
+        label = "Group" if block_type == "group" else "Setting"
         for character_id in getattr(block, "character_ids", []):
             member = project.blocks.get(character_id)
             if member is None or member.block_type != "character":
-                raise NotFoundError(f"Group character not found: {character_id}")
+                raise NotFoundError(f"{label} character not found: {character_id}")
+    if block_type == "dialogue":
+        chapter = _chapter_holding_block(project, block.id)
+        chapter_block_ids = set(chapter.block_ids) if chapter is not None else set()
+        for line in getattr(block, "lines", []) or []:
+            character_id = getattr(line, "character_id", None)
+            if not character_id:
+                continue
+            member = project.blocks.get(character_id)
+            if member is None or member.block_type != "character":
+                raise NotFoundError(f"Dialogue character not found: {character_id}")
+            if chapter is not None and character_id not in chapter_block_ids:
+                raise ValidationConflictError(
+                    "Dialogue character must belong to the same chapter as the dialogue block"
+                )
+
+
+def _next_setting_color_variant(project: StoryProject, chapter: Chapter) -> int:
+    """Assign the next light→dark shade index for a new setting in the chapter."""
+    variants = [
+        int(getattr(project.blocks[block_id], "color_variant", 0))
+        for block_id in chapter.block_ids
+        if (existing := project.blocks.get(block_id)) is not None
+        and existing.block_type == "setting"
+    ]
+    if not variants:
+        return 0
+    return max(variants) + 1
 
 
 def _assert_chapters_exist(project: StoryProject, chapter_ids: list[str]) -> None:

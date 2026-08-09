@@ -1,7 +1,12 @@
-import type { FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   FIGURATIVE_DEVICES,
   assertNever,
+  emptyDialogueLine,
+  ensureDialogueLines,
+  isDialogueLineEmpty,
+  type DialogueBlock,
+  type DialogueLine,
   type FigurativeDevice,
   type StoryBlock,
   type StoryProject,
@@ -70,10 +75,15 @@ export function BlockEditor({
         }
       />
       {open ? (
-        <form className="stack" onSubmit={handleSubmit}>
+        <form className="stack" onSubmit={handleSubmit} noValidate>
           <label>
             Title
-            <input name="title" defaultValue={block.title} aria-label="Title" />
+            <input
+              name="title"
+              defaultValue={block.title}
+              key={`${block.id}-title-${block.title}`}
+              aria-label="Title"
+            />
           </label>
           {renderTypedFields(block, project, onSetSettingSequence)}
           <div className="button-row">
@@ -106,6 +116,191 @@ function foilOptions(project: StoryProject, excludeId: string) {
 
 function characterOptions(project: StoryProject) {
   return Object.values(project.blocks).filter((item) => item.block_type === 'character');
+}
+
+function chapterCharacterOptions(project: StoryProject, blockId: string) {
+  const chapter = findChapterForBlock(project, blockId);
+  if (!chapter) return [];
+  return chapter.block_ids
+    .map((id) => project.blocks[id])
+    .filter((item): item is StoryBlock => Boolean(item) && item.block_type === 'character');
+}
+
+function DialogueScriptTable({
+  block,
+  project,
+}: {
+  block: DialogueBlock;
+  project: StoryProject;
+}) {
+  const [lines, setLines] = useState<DialogueLine[]>(() => ensureDialogueLines(block.lines));
+  const characters = chapterCharacterOptions(project, block.id);
+  const linesKey = JSON.stringify(block.lines ?? []);
+
+  useEffect(() => {
+    setLines(ensureDialogueLines(block.lines));
+  }, [block.id, linesKey, block.lines]);
+
+  function updateLine(index: number, patch: Partial<DialogueLine>) {
+    setLines((current) =>
+      current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)),
+    );
+  }
+
+  function addLine() {
+    setLines((current) => [...current, emptyDialogueLine()]);
+  }
+
+  function removeLine(index: number) {
+    setLines((current) => {
+      if (current.length <= 1) return [emptyDialogueLine()];
+      return current.filter((_, lineIndex) => lineIndex !== index);
+    });
+  }
+
+  return (
+    <div className="dialogue-script">
+      <input type="hidden" name="lines_json" value={JSON.stringify(lines)} readOnly />
+      <div className="dialogue-script-scroll">
+        <table className="dialogue-script-table">
+          <thead>
+            <tr>
+              <th scope="col">Character</th>
+              <th scope="col">Mode</th>
+              <th scope="col">Action</th>
+              <th scope="col">Emotion</th>
+              <th scope="col">Volume</th>
+              <th scope="col">Overheard</th>
+              <th scope="col">4th wall</th>
+              <th scope="col">Conversation</th>
+              <th scope="col">Subtext</th>
+              <th scope="col">
+                <span className="visually-hidden">Remove</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, index) => (
+              <tr key={`${block.id}-line-${index}`}>
+                <td>
+                  <select
+                    aria-label={`Character for line ${index + 1}`}
+                    value={line.character_id ?? ''}
+                    onChange={(event) => {
+                      const nextId = event.target.value || null;
+                      const selected = characters.find((item) => item.id === nextId);
+                      updateLine(index, {
+                        character_id: nextId,
+                        character_label: selected?.title ?? '',
+                      });
+                    }}
+                  >
+                    <option value="">—</option>
+                    {characters.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title || item.id}
+                      </option>
+                    ))}
+                  </select>
+                  {characters.length === 0 ? (
+                    <span className="muted dialogue-script-hint">Add characters to this chapter</span>
+                  ) : null}
+                </td>
+                <td>
+                  <div className="dialogue-mode" role="radiogroup" aria-label={`Speech mode for line ${index + 1}`}>
+                    <label className="checkbox-row">
+                      <input
+                        type="radio"
+                        name={`speech_mode_${index}`}
+                        checked={!line.internal_monologue}
+                        onChange={() => updateLine(index, { internal_monologue: false })}
+                      />
+                      True dialogue
+                    </label>
+                    <label className="checkbox-row">
+                      <input
+                        type="radio"
+                        name={`speech_mode_${index}`}
+                        checked={line.internal_monologue}
+                        onChange={() => updateLine(index, { internal_monologue: true })}
+                      />
+                      Internal monologue
+                    </label>
+                  </div>
+                </td>
+                <td>
+                  <input
+                    aria-label={`Action for line ${index + 1}`}
+                    value={line.action}
+                    placeholder="tick, glance…"
+                    onChange={(event) => updateLine(index, { action: event.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label={`Emotion for line ${index + 1}`}
+                    value={line.emotional_state}
+                    onChange={(event) => updateLine(index, { emotional_state: event.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label={`Volume for line ${index + 1}`}
+                    value={line.volume}
+                    onChange={(event) => updateLine(index, { volume: event.target.value })}
+                  />
+                </td>
+                <td className="dialogue-flag">
+                  <input
+                    type="checkbox"
+                    aria-label={`Overheard for line ${index + 1}`}
+                    checked={line.overheard}
+                    onChange={(event) => updateLine(index, { overheard: event.target.checked })}
+                  />
+                </td>
+                <td className="dialogue-flag">
+                  <input
+                    type="checkbox"
+                    aria-label={`Fourth wall for line ${index + 1}`}
+                    checked={line.fourth_wall}
+                    onChange={(event) => updateLine(index, { fourth_wall: event.target.checked })}
+                  />
+                </td>
+                <td>
+                  <textarea
+                    aria-label={`Conversation for line ${index + 1}`}
+                    rows={2}
+                    value={line.conversation}
+                    onChange={(event) => updateLine(index, { conversation: event.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    aria-label={`Subtext for line ${index + 1}`}
+                    value={line.subtext}
+                    onChange={(event) => updateLine(index, { subtext: event.target.value })}
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="ghost"
+                    aria-label={`Remove line ${index + 1}`}
+                    onClick={() => removeLine(index)}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" className="secondary" onClick={addLine}>
+        Add line
+      </button>
+    </div>
+  );
 }
 
 function renderTypedFields(
@@ -166,6 +361,26 @@ function renderTypedFields(
             Juxtaposition (optional)
             <textarea name="juxtaposition" defaultValue={block.juxtaposition ?? ''} rows={2} />
           </label>
+          <fieldset className="multi-select">
+            <legend>Characters in this setting</legend>
+            {characterOptions(project).length === 0 ? (
+              <p className="muted">
+                Add a Character block from the bins and name it to place people in this scene.
+              </p>
+            ) : (
+              characterOptions(project).map((item) => (
+                <label key={item.id} className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    name="character_ids"
+                    value={item.id}
+                    defaultChecked={(block.character_ids ?? []).includes(item.id)}
+                  />
+                  {item.title || item.id}
+                </label>
+              ))
+            )}
+          </fieldset>
         </>
       );
     }
@@ -230,71 +445,7 @@ function renderTypedFields(
         </>
       );
     case 'dialogue':
-      return (
-        <>
-          <label>
-            Character
-            <input name="character" defaultValue={block.character} />
-          </label>
-          <label>
-            Emotional state
-            <input name="emotional_state" defaultValue={block.emotional_state} />
-          </label>
-          <label>
-            Volume
-            <input name="volume" defaultValue={block.volume} />
-          </label>
-          <label>
-            Conversation
-            <textarea name="conversation" defaultValue={block.conversation} rows={4} />
-          </label>
-          <label>
-            Subtext
-            <textarea name="subtext" defaultValue={block.subtext ?? ''} rows={2} />
-          </label>
-          <fieldset className="multi-select dialogue-switches">
-            <legend>Speech mode</legend>
-            <label className="checkbox-row">
-              <input
-                type="radio"
-                name="speech_mode"
-                value="dialogue"
-                defaultChecked={!block.internal_monologue}
-                aria-label="True dialogue"
-              />
-              True dialogue
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="radio"
-                name="speech_mode"
-                value="monologue"
-                defaultChecked={Boolean(block.internal_monologue)}
-                aria-label="Internal monologue"
-              />
-              Internal monologue
-            </label>
-          </fieldset>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              name="overheard"
-              defaultChecked={Boolean(block.overheard)}
-              aria-label="Overheard"
-            />
-            Overheard
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              name="fourth_wall"
-              defaultChecked={Boolean(block.fourth_wall)}
-              aria-label="Fourth Wall"
-            />
-            Fourth Wall
-          </label>
-        </>
-      );
+      return <DialogueScriptTable block={block} project={project} />;
     case 'group':
       return (
         <fieldset className="multi-select">
@@ -434,6 +585,7 @@ function buildPatch(block: StoryBlock, form: FormData): Record<string, unknown> 
         description: get('description'),
         micro_settings: listField(get('micro_settings')),
         juxtaposition: get('juxtaposition'),
+        character_ids: getAll('character_ids'),
       };
     case 'character': {
       const foil = get('character_foil_id');
@@ -450,18 +602,21 @@ function buildPatch(block: StoryBlock, form: FormData): Record<string, unknown> 
         character_foil_id: foil || null,
       };
     }
-    case 'dialogue':
+    case 'dialogue': {
+      let lines: DialogueLine[] = ensureDialogueLines([]);
+      try {
+        const raw = get('lines_json');
+        const parsed = raw ? (JSON.parse(raw) as DialogueLine[]) : [];
+        lines = ensureDialogueLines(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        lines = ensureDialogueLines(block.lines);
+      }
+      const cleaned = lines.filter((line) => !isDialogueLineEmpty(line));
       return {
         ...base,
-        character: get('character'),
-        emotional_state: get('emotional_state'),
-        volume: get('volume'),
-        conversation: get('conversation'),
-        subtext: get('subtext'),
-        internal_monologue: get('speech_mode') === 'monologue',
-        overheard: form.get('overheard') === 'on',
-        fourth_wall: form.get('fourth_wall') === 'on',
+        lines: cleaned.length > 0 ? cleaned : [emptyDialogueLine()],
       };
+    }
     case 'group':
       return {
         ...base,

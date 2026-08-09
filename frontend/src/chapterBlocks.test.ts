@@ -4,6 +4,7 @@ import {
   settingSequenceInChapter,
 } from './chapterBlocks';
 import type { Chapter, StoryProject } from './types';
+import { settingShadeIndex } from './types';
 
 const chapter: Chapter = {
   id: 'ch_1',
@@ -52,5 +53,12 @@ describe('chapterBlocks setting sequence', () => {
   it('reorders settings without disturbing non-setting slots', () => {
     const next = reorderSettingSequence(chapter, blocks, 'set_c', 1);
     expect(next).toEqual(['set_c', 'char_1', 'set_a', 'set_b']);
+  });
+
+  it('maps color_variant into a stable 0–7 shade index', () => {
+    expect(settingShadeIndex(0)).toBe(0);
+    expect(settingShadeIndex(7)).toBe(7);
+    expect(settingShadeIndex(8)).toBe(0);
+    expect(settingShadeIndex(-1)).toBe(7);
   });
 });

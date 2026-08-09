@@ -116,18 +116,7 @@ def export_story_markdown(project: StoryProject) -> str:
                 label = BLOCK_TYPE_LABELS.get(block.block_type, block.block_type)
                 title = block.title or label
                 lines.append(f"##### {label}: {title}")
-                for key, value in block.model_dump().items():
-                    if key in {"id", "block_type", "title"}:
-                        continue
-                    if value in ("", [], None):
-                        continue
-                    if isinstance(value, list):
-                        joined = ", ".join(map(str, value))
-                        label = key.replace("_", " ").title()
-                        lines.append(f"- {label}: {joined}")
-                    else:
-                        label = key.replace("_", " ").title()
-                        lines.append(f"- {label}: {value}")
+                _append_block_fields(lines, block, project)
                 related = [
                     link
                     for link in project.block_links
@@ -271,7 +260,7 @@ def export_agent_writing_pack(project: StoryProject) -> str:
             for block in typed_blocks:
                 title = block.title or label
                 lines.append(f"##### {title}")
-                _append_block_fields(lines, block)
+                _append_block_fields(lines, block, project)
                 lines.append("")
 
     lines.append("### Cross-Chapter Block Links")
@@ -346,7 +335,7 @@ def export_agent_writing_pack(project: StoryProject) -> str:
                     )
                     title = local_block.title or label
                     lines.append(f"##### {label}: {title}")
-                    _append_block_fields(lines, local_block)
+                    _append_block_fields(lines, local_block, project)
                     lines.append("")
 
             lines.append("#### Prior Continuity")
@@ -450,7 +439,14 @@ def _append_writing_texture(
         lines.append(f"- {_WRITING_TEXTURE_LABELS[field]}: `{value}`")
 
 
-def _append_block_fields(lines: list[str], block: Block) -> None:
+def _append_block_fields(
+    lines: list[str],
+    block: Block,
+    project: StoryProject | None = None,
+) -> None:
+    if block.block_type == "dialogue":
+        _append_dialogue_script(lines, block, project)
+        return
     for key, value in block.model_dump().items():
         if key in {"id", "block_type", "title"}:
             continue
@@ -463,7 +459,65 @@ def _append_block_fields(lines: list[str], block: Block) -> None:
             lines.append(f"- {field_label}: {value}")
 
 
+def _append_dialogue_script(
+    lines: list[str],
+    block: Block,
+    project: StoryProject | None = None,
+) -> None:
+    script_lines = getattr(block, "lines", []) or []
+    if not script_lines:
+        return
+    lines.append("- Script:")
+    for index, line in enumerate(script_lines, start=1):
+        speaker = (getattr(line, "character_label", "") or "").strip()
+        character_id = getattr(line, "character_id", None)
+        if character_id and project is not None:
+            character = project.blocks.get(character_id)
+            if character is not None and (character.title or "").strip():
+                speaker = character.title.strip()
+        if not speaker and character_id:
+            speaker = character_id
+        if not speaker:
+            speaker = "—"
+        mode = "internal monologue" if getattr(line, "internal_monologue", False) else "dialogue"
+        flags: list[str] = [mode]
+        if getattr(line, "overheard", False):
+            flags.append("overheard")
+        if getattr(line, "fourth_wall", False):
+            flags.append("fourth wall")
+        conversation = (getattr(line, "conversation", "") or "").strip() or "…"
+        entry = f"  {index}. {speaker} ({', '.join(flags)}): {conversation}"
+        lines.append(entry)
+        action = (getattr(line, "action", "") or "").strip()
+        if action:
+            lines.append(f"     Action: {action}")
+        emotion = (getattr(line, "emotional_state", "") or "").strip()
+        if emotion:
+            lines.append(f"     Emotion: {emotion}")
+        volume = (getattr(line, "volume", "") or "").strip()
+        if volume:
+            lines.append(f"     Volume: {volume}")
+        subtext = (getattr(line, "subtext", "") or "").strip()
+        if subtext:
+            lines.append(f"     Subtext: {subtext}")
+
+
 def _block_has_content(block: Block) -> bool:
+    if block.block_type == "dialogue":
+        for line in getattr(block, "lines", []) or []:
+            if any(
+                [
+                    (getattr(line, "conversation", "") or "").strip(),
+                    (getattr(line, "action", "") or "").strip(),
+                    (getattr(line, "subtext", "") or "").strip(),
+                    (getattr(line, "emotional_state", "") or "").strip(),
+                    (getattr(line, "volume", "") or "").strip(),
+                    getattr(line, "character_id", None),
+                    (getattr(line, "character_label", "") or "").strip(),
+                ]
+            ):
+                return True
+        return bool(block.title.strip())
     for key, value in block.model_dump().items():
         if key in {"id", "block_type", "title"}:
             continue

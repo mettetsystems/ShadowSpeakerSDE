@@ -150,6 +150,10 @@ export interface SettingBlock extends BlockBase {
   description: string;
   micro_settings: string[];
   juxtaposition: string;
+  /** Timeline shade index; clones keep the same value for scene returns. */
+  color_variant: number;
+  /** Character blocks present in this setting/scene. */
+  character_ids: string[];
 }
 
 export interface CharacterBlock extends BlockBase {
@@ -165,18 +169,61 @@ export interface CharacterBlock extends BlockBase {
   character_foil_id: string | null;
 }
 
-export interface DialogueBlock extends BlockBase {
-  block_type: 'dialogue';
+export interface DialogueLine {
+  character_id: string | null;
+  /** Legacy free-text speaker when no character_id is linked. */
+  character_label: string;
+  conversation: string;
   emotional_state: string;
   volume: string;
-  conversation: string;
-  character: string;
   subtext: string;
-  fourth_wall: boolean;
+  /** Stage business: ticks, micro-expressions, gestures, etc. */
+  action: string;
   /** true = internal monologue; false = spoken / true dialogue */
   internal_monologue: boolean;
   overheard: boolean;
+  fourth_wall: boolean;
+}
+
+export interface DialogueBlock extends BlockBase {
+  block_type: 'dialogue';
+  lines: DialogueLine[];
   template_source_id: string | null;
+}
+
+export function emptyDialogueLine(): DialogueLine {
+  return {
+    character_id: null,
+    character_label: '',
+    conversation: '',
+    emotional_state: '',
+    volume: '',
+    subtext: '',
+    action: '',
+    internal_monologue: false,
+    overheard: false,
+    fourth_wall: false,
+  };
+}
+
+export function ensureDialogueLines(lines: DialogueLine[] | null | undefined): DialogueLine[] {
+  if (lines && lines.length > 0) return lines.map((line) => ({ ...emptyDialogueLine(), ...line }));
+  return [emptyDialogueLine()];
+}
+
+export function isDialogueLineEmpty(line: DialogueLine): boolean {
+  return (
+    !line.character_id &&
+    !line.character_label.trim() &&
+    !line.conversation.trim() &&
+    !line.emotional_state.trim() &&
+    !line.volume.trim() &&
+    !line.subtext.trim() &&
+    !line.action.trim() &&
+    !line.internal_monologue &&
+    !line.overheard &&
+    !line.fourth_wall
+  );
 }
 
 export interface SpecialItemBlock extends BlockBase {
@@ -357,6 +404,14 @@ export const WRITING_TEXTURE_TECHNIQUES: {
 export function writingTextureTotal(texture: WritingTexture | null | undefined): number {
   const source = texture ?? EMPTY_WRITING_TEXTURE;
   return WRITING_TEXTURE_TECHNIQUES.reduce((sum, technique) => sum + (source[technique.value] ?? 0), 0);
+}
+
+/** Number of distinct light→dark shades used for setting chips on the timeline. */
+export const SETTING_COLOR_SHADE_COUNT = 8;
+
+export function settingShadeIndex(colorVariant: number | null | undefined): number {
+  const value = Number.isFinite(colorVariant) ? Number(colorVariant) : 0;
+  return ((value % SETTING_COLOR_SHADE_COUNT) + SETTING_COLOR_SHADE_COUNT) % SETTING_COLOR_SHADE_COUNT;
 }
 
 export const FIGURATIVE_DEVICES: { value: FigurativeDevice; label: string }[] = [

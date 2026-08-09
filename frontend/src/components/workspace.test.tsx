@@ -10,7 +10,7 @@ import { ReviewPanel } from './ReviewPanel';
 import { SubplotPanel } from './SubplotPanel';
 import { Timeline } from './Timeline';
 import type { StoryProject } from '../types';
-import { BLOCK_TYPE_LABELS } from '../types';
+import { BLOCK_TYPE_LABELS, type SettingBlock } from '../types';
 
 function withDnd(ui: ReactNode) {
   return render(<DndContext>{ui}</DndContext>);
@@ -116,6 +116,8 @@ function sampleProject(): StoryProject {
         description: 'Salt and rope',
         micro_settings: ['pier'],
         juxtaposition: '',
+        color_variant: 0,
+        character_ids: [],
       },
       blk_character: {
         id: 'blk_character',
@@ -241,6 +243,8 @@ describe('chapter and timeline rendering', () => {
       description: '',
       micro_settings: [],
       juxtaposition: '',
+      color_variant: 1,
+      character_ids: [],
     };
     withDnd(
       <ChapterWorkspace {...workspaceProps({ project, onSetSettingSequence })} />,
@@ -275,7 +279,10 @@ describe('timeline and block editor', () => {
       screen.getByRole('button', { name: 'Debt from Arrival to Departure' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Blocks in Arrival')).toBeInTheDocument();
-    expect(screen.getByText('Harbor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Setting: Harbor' })).toHaveAttribute(
+      'data-shade',
+      '0',
+    );
     await user.click(screen.getByRole('button', { name: 'Add row' }));
     expect(onAddSlots).toHaveBeenCalledWith(1);
     await user.click(screen.getByRole('button', { name: 'Open subplot row 1' }));
@@ -388,31 +395,87 @@ describe('timeline and block editor', () => {
     await user.type(screen.getByLabelText('Title'), 'Quay');
     await user.clear(screen.getByLabelText('Micro-settings (one per line)'));
     await user.type(screen.getByLabelText('Micro-settings (one per line)'), 'crane\nnet');
+    await user.click(screen.getByLabelText('Mara'));
     await user.click(screen.getByRole('button', { name: 'Save block' }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Quay',
         micro_settings: ['crane', 'net'],
+        character_ids: ['blk_character'],
       }),
     );
   });
 
-  it('saves dialogue speech mode and overheard switches', async () => {
+  it('keeps cloned setting shade on the timeline chip', () => {
+    const onSelectBlock = vi.fn();
+    const project = sampleProject();
+    project.chapters[0]!.block_ids = ['blk_setting', 'blk_setting_clone'];
+    project.blocks.blk_setting_clone = {
+      ...(project.blocks.blk_setting as SettingBlock),
+      id: 'blk_setting_clone',
+      title: 'Harbor (return)',
+      color_variant: 0,
+    };
+    project.blocks.blk_setting_b = {
+      id: 'blk_setting_b',
+      block_type: 'setting',
+      title: 'Quay',
+      time_of_day: 'dusk',
+      environment_state: 'dry',
+      description: '',
+      micro_settings: [],
+      juxtaposition: '',
+      color_variant: 1,
+      character_ids: [],
+    };
+    project.chapters[0]!.block_ids.push('blk_setting_b');
+    render(
+      <Timeline
+        project={project}
+        selectedChapterId="ch_a"
+        selectedSubplotId={null}
+        selectedBlockId="blk_setting_clone"
+        onSelectChapter={vi.fn()}
+        onSelectSubplot={vi.fn()}
+        onSelectBlock={onSelectBlock}
+        onAddSlots={vi.fn()}
+        onRenameSlot={vi.fn()}
+        onPaintCoverage={vi.fn()}
+      />,
+    );
+    const original = screen.getByRole('button', { name: 'Setting: Harbor' });
+    const clone = screen.getByRole('button', { name: 'Setting: Harbor (return)' });
+    const next = screen.getByRole('button', { name: 'Setting: Quay' });
+    expect(original).toHaveAttribute('data-shade', '0');
+    expect(clone).toHaveAttribute('data-shade', '0');
+    expect(next).toHaveAttribute('data-shade', '1');
+    expect(clone.className).toContain('selected');
+  });
+
+  it('saves dialogue script lines with speech mode and overheard', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     const project = sampleProject();
+    project.chapters[0]!.block_ids = ['blk_setting', 'blk_character', 'blk_dialogue'];
+    project.chapters[1]!.block_ids = [];
     project.blocks.blk_dialogue = {
       id: 'blk_dialogue',
       block_type: 'dialogue',
       title: 'Aside',
-      emotional_state: 'tense',
-      volume: 'whisper',
-      conversation: 'Stay back',
-      character: 'Mara',
-      subtext: '',
-      fourth_wall: false,
-      internal_monologue: false,
-      overheard: false,
+      lines: [
+        {
+          character_id: 'blk_character',
+          character_label: 'Mara',
+          emotional_state: 'tense',
+          volume: 'whisper',
+          conversation: 'Stay back',
+          subtext: '',
+          action: '',
+          fourth_wall: false,
+          internal_monologue: false,
+          overheard: false,
+        },
+      ],
       template_source_id: null,
     };
     render(
@@ -426,13 +489,25 @@ describe('timeline and block editor', () => {
         linkHint={null}
       />,
     );
-    await user.click(screen.getByLabelText('Internal monologue'));
-    await user.click(screen.getByLabelText('Overheard'));
+    expect(screen.getByLabelText('Character for line 1')).toHaveValue('blk_character');
+    await user.click(screen.getByLabelText(/Internal monologue/i));
+    await user.click(screen.getByLabelText('Overheard for line 1'));
+    await user.clear(screen.getByLabelText('Action for line 1'));
+    await user.type(screen.getByLabelText('Action for line 1'), 'jaw tick');
+    await user.click(screen.getByRole('button', { name: 'Add line' }));
+    expect(screen.getByLabelText('Conversation for line 2')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save block' }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        internal_monologue: true,
-        overheard: true,
+        lines: [
+          expect.objectContaining({
+            character_id: 'blk_character',
+            conversation: 'Stay back',
+            action: 'jaw tick',
+            internal_monologue: true,
+            overheard: true,
+          }),
+        ],
       }),
     );
   });

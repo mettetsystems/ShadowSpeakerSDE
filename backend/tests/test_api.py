@@ -255,6 +255,45 @@ def test_writing_texture_chapter_api(client: TestClient) -> None:
     assert "#### Writing Texture" in pack.text
 
 
+def test_patch_setting_title_and_characters(client: TestClient) -> None:
+    project = client.post("/projects", json={"name": "Names"}).json()["project"]
+    project_id = project["id"]
+    chapter_id = client.post(
+        f"/projects/{project_id}/chapters", json={"title": "One"}
+    ).json()["project"]["chapters"][0]["id"]
+    project = client.post(
+        f"/projects/{project_id}/chapters/{chapter_id}/blocks",
+        json={"block_type": "character"},
+    ).json()["project"]
+    character_id = project["chapters"][0]["block_ids"][0]
+    project = client.post(
+        f"/projects/{project_id}/chapters/{chapter_id}/blocks",
+        json={"block_type": "setting"},
+    ).json()["project"]
+    setting_id = next(
+        bid
+        for bid in project["chapters"][0]["block_ids"]
+        if project["blocks"][bid]["block_type"] == "setting"
+    )
+    patched = client.patch(
+        f"/projects/{project_id}/blocks/{setting_id}",
+        json={
+            "title": "Birmingham Alabama",
+            "character_ids": [character_id],
+            "time_of_day": "dusk",
+            "environment_state": "",
+            "description": "",
+            "micro_settings": [],
+            "juxtaposition": "",
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    setting = patched.json()["project"]["blocks"][setting_id]
+    assert setting["title"] == "Birmingham Alabama"
+    assert setting["character_ids"] == [character_id]
+    assert setting["color_variant"] == 0
+
+
 def test_clone_and_timeline_slot_api(client: TestClient) -> None:
     project = client.post("/projects", json={"name": "Slots"}).json()["project"]
     project_id = project["id"]
