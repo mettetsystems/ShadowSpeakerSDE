@@ -544,6 +544,7 @@ export default function App() {
           onSelectBlock={(blockId) =>
             setUi((prev) => ({ ...prev, selectedBlockId: blockId }))
           }
+          onMoveChapter={(chapterId, direction) => void moveChapter(chapterId, direction)}
           onAddSlots={(count = 1) =>
             void mutate((id) => api.addTimelineSlots(id, count))
           }

@@ -37,6 +37,7 @@ interface TimelineProps {
   onSelectChapter: (chapterId: string) => void;
   onSelectSubplot: (subplotId: string | null) => void;
   onSelectBlock?: (blockId: string) => void;
+  onMoveChapter?: (chapterId: string, direction: -1 | 1) => void;
   onAddSlots: (count?: number) => void;
   onRenameSlot: (slotId: string, name: string) => void;
   onPaintCoverage: (slotId: string, chapterIds: string[]) => void;
@@ -71,6 +72,7 @@ export function Timeline({
   onSelectChapter,
   onSelectSubplot,
   onSelectBlock,
+  onMoveChapter,
   onAddSlots,
   onRenameSlot,
   onPaintCoverage,
@@ -95,7 +97,8 @@ export function Timeline({
           <div className="timeline-toolbar">
             <span className="muted">
               {chapters.length} chapter{chapters.length === 1 ? '' : 's'} · {slots.length} /{' '}
-              {MAX_SLOTS} rows · drag bars to move · handles to scale · Alt-click to gap
+              {MAX_SLOTS} rows · drag bars to move · handles to scale · Alt-click to gap · ← →
+              reorder chapters
             </span>
             <button type="button" disabled={atCap} onClick={() => onAddSlots(1)}>
               Add row
@@ -112,11 +115,31 @@ export function Timeline({
             <div className="timeline-gantt" style={{ ['--gantt-cols' as string]: chapterTemplate }}>
               <div className="timeline-corner" />
               <div className="gantt-chapters" role="row">
-                {chapters.map((chapter) => (
+                {chapters.map((chapter, index) => (
                   <div
                     key={chapter.id}
                     className={`timeline-chapter-cell${selectedChapterId === chapter.id ? ' selected' : ''}`}
                   >
+                    <div className="timeline-chapter-reorder">
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={!onMoveChapter || index === 0}
+                        aria-label={`Move ${chapter.title} left`}
+                        onClick={() => onMoveChapter?.(chapter.id, -1)}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={!onMoveChapter || index === chapters.length - 1}
+                        aria-label={`Move ${chapter.title} right`}
+                        onClick={() => onMoveChapter?.(chapter.id, 1)}
+                      >
+                        →
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className={`timeline-chapter${selectedChapterId === chapter.id ? ' selected' : ''}`}

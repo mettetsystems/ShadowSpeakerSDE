@@ -43,6 +43,7 @@ from shadowspeaker.domain.mutations import (
     create_block_link,
     create_project,
     delete_block,
+    ensure_block_templates,
     move_block,
     paint_timeline_slot_coverage,
     reorder_chapters,
@@ -104,6 +105,8 @@ def test_parse_every_block_type() -> None:
     assert isinstance(parsed[4], VehicleBlock)
     assert isinstance(parsed[5], ToolBlock)
     assert isinstance(parsed[6], GroupBlock)
+    assert parsed[6].description == ""
+    assert parsed[6].adversaries == ""
     assert isinstance(parsed[7], ProseBuilderBlock)
     assert parsed[0].micro_settings == ["dock", "fog"]
     assert parsed[0].juxtaposition == "calm vs storm"
@@ -255,6 +258,75 @@ def test_dialogue_character_must_be_in_same_chapter() -> None:
     assert project.blocks[dialogue_id].lines[0].action == "nod"
 
 
+def test_group_definition_adversaries_and_chapter_roster() -> None:
+    project = create_project("Factions")
+    project = add_chapter(project, title="A")
+    project = add_chapter(project, title="B")
+    a, b = project.chapters
+    project = add_block_from_template(project, chapter_id=a.id, block_type="character")
+    project = add_block_from_template(project, chapter_id=a.id, block_type="group")
+    character_id = next(
+        bid
+        for bid in project.chapters[0].block_ids
+        if project.blocks[bid].block_type == "character"
+    )
+    group_id = next(
+        bid
+        for bid in project.chapters[0].block_ids
+        if project.blocks[bid].block_type == "group"
+    )
+    project = update_block(
+        project,
+        group_id,
+        {
+            "title": "Starstreaker Ops",
+            "description": "Black-site research cadre",
+            "adversaries": "External auditors",
+            "character_ids": [character_id],
+        },
+    )
+    group = project.blocks[group_id]
+    assert group.description == "Black-site research cadre"
+    assert group.adversaries == "External auditors"
+    assert group.character_ids == [character_id]
+
+    project = add_block_from_template(project, chapter_id=b.id, block_type="character")
+    other_character = next(
+        bid
+        for bid in project.chapters[1].block_ids
+        if project.blocks[bid].block_type == "character"
+    )
+    with pytest.raises(ValidationConflictError):
+        update_block(project, group_id, {"character_ids": [other_character]})
+
+    project = clone_block(project, block_id=group_id, target_chapter_id=b.id)
+    cloned_id = next(
+        bid
+        for bid in project.chapters[1].block_ids
+        if project.blocks[bid].block_type == "group"
+    )
+    # Source-chapter members are cleared; assign the local cast independently.
+    assert project.blocks[cloned_id].character_ids == []
+    assert project.blocks[cloned_id].description == "Black-site research cadre"
+    project = update_block(project, cloned_id, {"character_ids": [other_character]})
+    assert project.blocks[cloned_id].character_ids == [other_character]
+    assert project.blocks[group_id].character_ids == [character_id]
+
+
+def test_ensure_block_templates_adds_missing_group_bin() -> None:
+    project = create_project("Legacy")
+    project.block_templates = [
+        t for t in project.block_templates if t.block_type not in {"group", "prose_builder"}
+    ]
+    assert "group" not in {t.block_type for t in project.block_templates}
+    ensured = ensure_block_templates(project)
+    types = {t.block_type for t in ensured.block_templates}
+    assert "group" in types
+    assert "prose_builder" in types
+    # Idempotent when nothing is missing.
+    assert ensure_block_templates(ensured) is ensured
+
+
 def test_unknown_block_discriminator_rejected() -> None:
     with pytest.raises(ValidationError):
         parse_block({"id": "x", "block_type": "magic_spell"})
@@ -318,6 +390,30 @@ def test_subplot_association() -> None:
     project = associate_subplot_chapters(project, project.subplots[0].id, [ids[0]])
     assert project.subplots[0].chapter_ids == [ids[0]]
     assert project.chapters[1].subplot_ids == []
+
+
+def test_subplot_plot_archetype_and_delta() -> None:
+    project = create_project("Demo")
+    project = add_chapter(project, title="A")
+    project = add_subplot(project, name="Debt", chapter_ids=[project.chapters[0].id])
+    subplot = project.subplots[0]
+    assert subplot.plot_archetype == ""
+    assert subplot.delta == ""
+
+    project = update_subplot(
+        project,
+        subplot.id,
+        plot_archetype="revenge",
+        delta="Collected through silence, not blood.",
+    )
+    assert project.subplots[0].plot_archetype == "revenge"
+    assert project.subplots[0].delta == "Collected through silence, not blood."
+
+    project = update_subplot(project, subplot.id, plot_archetype="")
+    assert project.subplots[0].plot_archetype == ""
+
+    with pytest.raises(ValidationConflictError):
+        update_subplot(project, subplot.id, plot_archetype="not_a_real_archetype")
 
 
 def test_subplot_phases_default_and_cap() -> None:

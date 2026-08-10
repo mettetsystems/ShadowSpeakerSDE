@@ -147,6 +147,11 @@ class ToolBlock(BlockBase):
 
 class GroupBlock(BlockBase):
     block_type: Literal["group"] = "group"
+    # Who/what this group is (faction, crew, unit, etc.).
+    description: str = ""
+    # Optional opposing forces / rival factions (free text).
+    adversaries: str = ""
+    # Chapter-local roster for this group instance.
     character_ids: list[str] = Field(default_factory=list)
 
 

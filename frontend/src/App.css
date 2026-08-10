@@ -412,8 +412,21 @@ select {
 
 .timeline-chapter-cell {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.35rem;
   align-content: start;
+}
+
+.timeline-chapter-reorder {
+  display: flex;
+  gap: 0.15rem;
+  align-items: center;
+}
+
+.timeline-chapter-reorder .ghost {
+  min-width: 1.75rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .timeline-chapter {
@@ -865,6 +878,19 @@ select {
   width: 3.5rem;
 }
 
+.dialogue-line-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: center;
+}
+
+.dialogue-line-reorder .ghost {
+  min-width: 1.75rem;
+  padding: 0.1rem 0.35rem;
+  line-height: 1;
+}
+
 .dialogue-script-hint {
   display: block;
   font-size: 0.72rem;
@@ -1015,11 +1041,28 @@ select {
   margin-bottom: 0.35rem;
 }
 
+.subplot-archetype-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.subplot-archetype-row select {
+  max-width: 100%;
+}
+
 .subplot-phases {
   display: grid;
   gap: 0.65rem;
   padding-top: 0.35rem;
   border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+@media (max-width: 720px) {
+  .subplot-archetype-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .slot-label.selected {

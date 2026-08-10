@@ -160,6 +160,10 @@ class Subplot(BaseModel):
     chapter_ids: list[str] = Field(default_factory=list)
     related_subplot_ids: list[str] = Field(default_factory=list)
     phases: list[SubplotPhase] = Field(default_factory=list)
+    # Catalog id from plot_archetypes; empty means unset.
+    plot_archetype: str = ""
+    # How this subplot diverges from the chosen archetype template.
+    delta: str = ""
     inciting_incident: str = ""
     macguffin: str = ""
     plot_twist: str = ""

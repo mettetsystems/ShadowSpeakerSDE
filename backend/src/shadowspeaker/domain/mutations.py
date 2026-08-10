@@ -13,6 +13,7 @@ from shadowspeaker.domain.blocks import (
     DEFAULT_BLOCK_TITLES,
     empty_block_payload,
 )
+from shadowspeaker.domain.plot_archetypes import PLOT_ARCHETYPE_IDS
 from shadowspeaker.domain.models import (
     DEFAULT_SUBPLOT_PHASES,
     DEFAULT_TIMELINE_SLOTS,
@@ -69,6 +70,29 @@ def default_block_templates() -> list[BlockTemplate]:
             )
         )
     return templates
+
+
+def ensure_block_templates(project: StoryProject) -> StoryProject:
+    """Add any missing default bin templates (e.g. Group on older projects)."""
+    known = {template.block_type for template in project.block_templates}
+    missing = [
+        (block_type, label)
+        for block_type, label in BLOCK_TYPE_LABELS.items()
+        if block_type not in known
+    ]
+    if not missing:
+        return project
+    updated = project.model_copy(deep=True)
+    for block_type, label in missing:
+        updated.block_templates.append(
+            BlockTemplate(
+                id=f"tpl_{block_type}",
+                name=label,
+                block_type=block_type,
+                defaults={"title": DEFAULT_BLOCK_TITLES[block_type]},
+            )
+        )
+    return updated
 
 
 def default_timeline_slots(count: int = DEFAULT_TIMELINE_SLOTS) -> list[TimelineSlot]:
@@ -369,6 +393,8 @@ def update_subplot(
     name: str | None = None,
     description: str | None = None,
     phases: list[dict[str, Any]] | None = None,
+    plot_archetype: str | None = None,
+    delta: str | None = None,
     inciting_incident: str | None = None,
     macguffin: str | None = None,
     plot_twist: str | None = None,
@@ -392,6 +418,13 @@ def update_subplot(
                 raise NotFoundError(f"Subplot phase not found: {phase_id}")
             if "description" in item:
                 by_id[phase_id].description = str(item.get("description") or "")
+    if plot_archetype is not None:
+        archetype = plot_archetype.strip()
+        if archetype and archetype not in PLOT_ARCHETYPE_IDS:
+            raise ValidationConflictError(f"Unknown plot archetype: {archetype}")
+        subplot.plot_archetype = archetype
+    if delta is not None:
+        subplot.delta = delta
     if inciting_incident is not None:
         subplot.inciting_incident = inciting_incident
     if macguffin is not None:
@@ -589,9 +622,18 @@ def clone_block(
     target = _require_chapter(updated, target_chapter_id)
     payload = existing.model_dump()
     payload["id"] = new_block_id or _new_id("blk")
+    # Group rosters are chapter-local; drop members not already in the target chapter.
+    if existing.block_type == "group":
+        target_ids = set(target.block_ids)
+        payload["character_ids"] = [
+            character_id
+            for character_id in payload.get("character_ids", [])
+            if character_id in target_ids
+        ]
     cloned = parse_block(payload)
     updated.blocks[cloned.id] = cloned
     target.block_ids.append(cloned.id)
+    _validate_block_refs(updated, cloned)
     return updated
 
 
@@ -768,10 +810,20 @@ def _validate_block_refs(project: StoryProject, block: Any) -> None:
                 raise ValidationConflictError("Character cannot be its own foil")
     if block_type in {"group", "setting"}:
         label = "Group" if block_type == "group" else "Setting"
+        chapter = _chapter_holding_block(project, block.id) if block_type == "group" else None
+        chapter_block_ids = set(chapter.block_ids) if chapter is not None else set()
         for character_id in getattr(block, "character_ids", []):
             member = project.blocks.get(character_id)
             if member is None or member.block_type != "character":
                 raise NotFoundError(f"{label} character not found: {character_id}")
+            if (
+                block_type == "group"
+                and chapter is not None
+                and character_id not in chapter_block_ids
+            ):
+                raise ValidationConflictError(
+                    "Group character must belong to the same chapter as the group block"
+                )
     if block_type == "dialogue":
         chapter = _chapter_holding_block(project, block.id)
         chapter_block_ids = set(chapter.block_ids) if chapter is not None else set()

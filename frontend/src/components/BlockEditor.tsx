@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   FIGURATIVE_DEVICES,
   assertNever,
@@ -50,11 +50,21 @@ export function BlockEditor({
 }: BlockEditorProps) {
   const title = `Edit ${block.block_type.replace('_', ' ')}`;
   const { open, toggle } = useCollapsiblePanel(true);
+  const dialogueLinesRef = useRef<DialogueLine[]>(
+    block.block_type === 'dialogue' ? ensureDialogueLines(block.lines) : [],
+  );
+
+  function handleDialogueLinesChange(lines: DialogueLine[]) {
+    dialogueLinesRef.current = lines;
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const patch = buildPatch(block, form);
+    const patch = buildPatch(block, form, {
+      dialogueLines:
+        block.block_type === 'dialogue' ? dialogueLinesRef.current : undefined,
+    });
     onSave(patch);
   }
 
@@ -81,11 +91,16 @@ export function BlockEditor({
             <input
               name="title"
               defaultValue={block.title}
-              key={`${block.id}-title-${block.title}`}
+              key={`${block.id}-title`}
               aria-label="Title"
             />
           </label>
-          {renderTypedFields(block, project, onSetSettingSequence)}
+          {renderTypedFields(
+            block,
+            project,
+            onSetSettingSequence,
+            handleDialogueLinesChange,
+          )}
           <div className="button-row">
             <button type="submit">Save block</button>
             {block.block_type === 'dialogue' && onSaveAsTemplate ? (
@@ -129,17 +144,27 @@ function chapterCharacterOptions(project: StoryProject, blockId: string) {
 function DialogueScriptTable({
   block,
   project,
+  onLinesChange,
 }: {
   block: DialogueBlock;
   project: StoryProject;
+  onLinesChange?: (lines: DialogueLine[]) => void;
 }) {
   const [lines, setLines] = useState<DialogueLine[]>(() => ensureDialogueLines(block.lines));
   const characters = chapterCharacterOptions(project, block.id);
   const linesKey = JSON.stringify(block.lines ?? []);
+  const onLinesChangeRef = useRef(onLinesChange);
+  onLinesChangeRef.current = onLinesChange;
 
   useEffect(() => {
-    setLines(ensureDialogueLines(block.lines));
+    const next = ensureDialogueLines(block.lines);
+    setLines(next);
+    onLinesChangeRef.current?.(next);
   }, [block.id, linesKey, block.lines]);
+
+  useEffect(() => {
+    onLinesChangeRef.current?.(lines);
+  }, [lines]);
 
   function updateLine(index: number, patch: Partial<DialogueLine>) {
     setLines((current) =>
@@ -158,9 +183,20 @@ function DialogueScriptTable({
     });
   }
 
+  function moveLine(index: number, direction: -1 | 1) {
+    setLines((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      const temp = next[index]!;
+      next[index] = next[target]!;
+      next[target] = temp;
+      return next;
+    });
+  }
+
   return (
     <div className="dialogue-script">
-      <input type="hidden" name="lines_json" value={JSON.stringify(lines)} readOnly />
       <div className="dialogue-script-scroll">
         <table className="dialogue-script-table">
           <thead>
@@ -174,6 +210,9 @@ function DialogueScriptTable({
               <th scope="col">4th wall</th>
               <th scope="col">Conversation</th>
               <th scope="col">Subtext</th>
+              <th scope="col">
+                <span className="visually-hidden">Reorder</span>
+              </th>
               <th scope="col">
                 <span className="visually-hidden">Remove</span>
               </th>
@@ -282,6 +321,28 @@ function DialogueScriptTable({
                   />
                 </td>
                 <td>
+                  <div className="dialogue-line-reorder">
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={index === 0}
+                      aria-label={`Move line ${index + 1} up`}
+                      onClick={() => moveLine(index, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={index === lines.length - 1}
+                      aria-label={`Move line ${index + 1} down`}
+                      onClick={() => moveLine(index, 1)}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </td>
+                <td>
                   <button
                     type="button"
                     className="ghost"
@@ -307,6 +368,7 @@ function renderTypedFields(
   block: StoryBlock,
   project: StoryProject,
   onSetSettingSequence?: (blockId: string, sequence: number) => void,
+  onDialogueLinesChange?: (lines: DialogueLine[]) => void,
 ) {
   switch (block.block_type) {
     case 'setting': {
@@ -445,24 +507,61 @@ function renderTypedFields(
         </>
       );
     case 'dialogue':
-      return <DialogueScriptTable block={block} project={project} />;
-    case 'group':
       return (
-        <fieldset className="multi-select">
-          <legend>Characters in group (optional)</legend>
-          {characterOptions(project).map((item) => (
-            <label key={item.id} className="checkbox-row">
-              <input
-                type="checkbox"
-                name="character_ids"
-                value={item.id}
-                defaultChecked={(block.character_ids ?? []).includes(item.id)}
-              />
-              {item.title || item.id}
-            </label>
-          ))}
-        </fieldset>
+        <DialogueScriptTable
+          block={block}
+          project={project}
+          onLinesChange={onDialogueLinesChange}
+        />
       );
+    case 'group': {
+      const chapterCast = chapterCharacterOptions(project, block.id);
+      return (
+        <>
+          <label>
+            Group definition
+            <textarea
+              name="description"
+              defaultValue={block.description ?? ''}
+              rows={3}
+              aria-label="Group definition"
+              placeholder="Who they are, purpose, structure…"
+            />
+          </label>
+          <label>
+            Adversaries (optional)
+            <textarea
+              name="adversaries"
+              defaultValue={block.adversaries ?? ''}
+              rows={2}
+              aria-label="Group adversaries"
+              placeholder="Opposing groups, rivals, threats…"
+            />
+          </label>
+          <fieldset className="multi-select">
+            <legend>Characters in this chapter group</legend>
+            {chapterCast.length === 0 ? (
+              <p className="muted">
+                Add Character blocks to this chapter, then assign them here. Clone this
+                group into other chapters to change membership per chapter.
+              </p>
+            ) : (
+              chapterCast.map((item) => (
+                <label key={item.id} className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    name="character_ids"
+                    value={item.id}
+                    defaultChecked={(block.character_ids ?? []).includes(item.id)}
+                  />
+                  {item.title || item.id}
+                </label>
+              ))
+            )}
+          </fieldset>
+        </>
+      );
+    }
     case 'prose_builder':
       return (
         <>
@@ -572,7 +671,11 @@ function renderTypedFields(
   }
 }
 
-function buildPatch(block: StoryBlock, form: FormData): Record<string, unknown> {
+function buildPatch(
+  block: StoryBlock,
+  form: FormData,
+  options?: { dialogueLines?: DialogueLine[] },
+): Record<string, unknown> {
   const get = (name: string) => String(form.get(name) ?? '');
   const getAll = (name: string) => form.getAll(name).map(String);
   const base = { title: get('title') };
@@ -603,14 +706,8 @@ function buildPatch(block: StoryBlock, form: FormData): Record<string, unknown> 
       };
     }
     case 'dialogue': {
-      let lines: DialogueLine[] = ensureDialogueLines([]);
-      try {
-        const raw = get('lines_json');
-        const parsed = raw ? (JSON.parse(raw) as DialogueLine[]) : [];
-        lines = ensureDialogueLines(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        lines = ensureDialogueLines(block.lines);
-      }
+      const source = options?.dialogueLines ?? block.lines;
+      const lines = ensureDialogueLines(source);
       const cleaned = lines.filter((line) => !isDialogueLineEmpty(line));
       return {
         ...base,
@@ -620,6 +717,8 @@ function buildPatch(block: StoryBlock, form: FormData): Record<string, unknown> 
     case 'group':
       return {
         ...base,
+        description: get('description'),
+        adversaries: get('adversaries'),
         character_ids: getAll('character_ids'),
       };
     case 'prose_builder':

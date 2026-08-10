@@ -100,6 +100,8 @@ function sampleProject(): StoryProject {
           { id: 'ph_2', description: '' },
           { id: 'ph_3', description: '' },
         ],
+        plot_archetype: '',
+        delta: '',
         inciting_incident: '',
         macguffin: '',
         plot_twist: '',
@@ -374,6 +376,30 @@ describe('timeline and block editor', () => {
     expect(screen.getByRole('button', { name: 'Add row' })).toBeDisabled();
   });
 
+  it('reorders chapters from the timeline panel', async () => {
+    const user = userEvent.setup();
+    const onMoveChapter = vi.fn();
+    render(
+      <Timeline
+        project={sampleProject()}
+        selectedChapterId="ch_a"
+        selectedSubplotId={null}
+        onSelectChapter={vi.fn()}
+        onSelectSubplot={vi.fn()}
+        onMoveChapter={onMoveChapter}
+        onAddSlots={vi.fn()}
+        onRenameSlot={vi.fn()}
+        onPaintCoverage={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText('Move Arrival left')).toBeDisabled();
+    expect(screen.getByLabelText('Move Departure right')).toBeDisabled();
+    await user.click(screen.getByLabelText('Move Arrival right'));
+    expect(onMoveChapter).toHaveBeenCalledWith('ch_a', 1);
+    await user.click(screen.getByLabelText('Move Departure left'));
+    expect(onMoveChapter).toHaveBeenCalledWith('ch_b', -1);
+  });
+
   it('edits structured setting fields and preserves template labels', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -496,10 +522,19 @@ describe('timeline and block editor', () => {
     await user.type(screen.getByLabelText('Action for line 1'), 'jaw tick');
     await user.click(screen.getByRole('button', { name: 'Add line' }));
     expect(screen.getByLabelText('Conversation for line 2')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Conversation for line 2'), 'Keep moving');
+    expect(screen.getByLabelText('Move line 1 up')).toBeDisabled();
+    expect(screen.getByLabelText('Move line 2 down')).toBeDisabled();
+    await user.click(screen.getByLabelText('Move line 2 up'));
+    expect(screen.getByLabelText('Conversation for line 1')).toHaveValue('Keep moving');
+    expect(screen.getByLabelText('Conversation for line 2')).toHaveValue('Stay back');
     await user.click(screen.getByRole('button', { name: 'Save block' }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         lines: [
+          expect.objectContaining({
+            conversation: 'Keep moving',
+          }),
           expect.objectContaining({
             character_id: 'blk_character',
             conversation: 'Stay back',
@@ -508,6 +543,44 @@ describe('timeline and block editor', () => {
             overheard: true,
           }),
         ],
+      }),
+    );
+  });
+
+  it('saves group definition, adversaries, and chapter roster', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const project = sampleProject();
+    project.chapters[0]!.block_ids = ['blk_setting', 'blk_character', 'blk_group'];
+    project.chapters[1]!.block_ids = [];
+    project.blocks.blk_group = {
+      id: 'blk_group',
+      block_type: 'group',
+      title: 'Ops',
+      description: '',
+      adversaries: '',
+      character_ids: [],
+    };
+    render(
+      <BlockEditor
+        block={project.blocks.blk_group}
+        project={project}
+        onSave={onSave}
+        onClose={vi.fn()}
+        onStartLink={vi.fn()}
+        onDelete={vi.fn()}
+        linkHint={null}
+      />,
+    );
+    await user.type(screen.getByLabelText('Group definition'), 'Black-site cadre');
+    await user.type(screen.getByLabelText('Group adversaries'), 'Auditors');
+    await user.click(screen.getByLabelText('Mara'));
+    await user.click(screen.getByRole('button', { name: 'Save block' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'Black-site cadre',
+        adversaries: 'Auditors',
+        character_ids: ['blk_character'],
       }),
     );
   });
@@ -538,6 +611,27 @@ describe('subplot panel phases', () => {
     await user.tab();
     expect(onSave).toHaveBeenCalledWith({
       phases: [{ id: 'ph_2', description: 'Call in' }],
+    });
+  });
+
+  it('saves plot archetype and delta', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const subplot = sampleProject().subplots[0];
+    render(
+      <SubplotPanel
+        subplot={subplot}
+        onClose={vi.fn()}
+        onSave={onSave}
+        onAddPhase={vi.fn()}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText('Plot archetype'), 'revenge');
+    expect(onSave).toHaveBeenCalledWith({ plot_archetype: 'revenge' });
+    await user.type(screen.getByLabelText('Delta'), 'Debt collected through silence');
+    await user.tab();
+    expect(onSave).toHaveBeenCalledWith({
+      delta: 'Debt collected through silence',
     });
   });
 

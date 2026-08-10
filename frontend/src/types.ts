@@ -132,6 +132,10 @@ export interface Subplot {
   chapter_ids: string[];
   related_subplot_ids: string[];
   phases: SubplotPhase[];
+  /** Catalog id from plotArchetypes; empty means unset. */
+  plot_archetype: string;
+  /** How this subplot diverges from the chosen archetype template. */
+  delta: string;
   inciting_incident: string;
   macguffin: string;
   plot_twist: string;
@@ -252,6 +256,11 @@ export interface ToolBlock extends BlockBase {
 
 export interface GroupBlock extends BlockBase {
   block_type: 'group';
+  /** Who/what this group is (faction, crew, unit, etc.). */
+  description: string;
+  /** Optional opposing forces / rival factions. */
+  adversaries: string;
+  /** Chapter-local roster for this group instance. */
   character_ids: string[];
 }
 

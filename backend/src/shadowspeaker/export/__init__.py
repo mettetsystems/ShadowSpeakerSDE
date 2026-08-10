@@ -6,6 +6,7 @@ from typing import Protocol
 
 from shadowspeaker.domain.blocks import BLOCK_TYPE_LABELS, Block
 from shadowspeaker.domain.models import Chapter, Plot, StoryProject, Subplot
+from shadowspeaker.domain.plot_archetypes import plot_archetype_label
 from shadowspeaker.domain.review import collect_review_warnings
 
 
@@ -390,6 +391,13 @@ class PlainWritingStyleExporter:
 
 
 def _append_plot_craft(lines: list[str], item: Plot | Subplot) -> None:
+    if isinstance(item, Subplot):
+        if item.plot_archetype.strip():
+            lines.append(
+                f"- Plot archetype: {plot_archetype_label(item.plot_archetype.strip())}"
+            )
+        if item.delta.strip():
+            lines.append(f"- Delta: {item.delta.strip()}")
     if item.inciting_incident.strip():
         lines.append(f"- Inciting incident: {item.inciting_incident.strip()}")
     if item.macguffin.strip():

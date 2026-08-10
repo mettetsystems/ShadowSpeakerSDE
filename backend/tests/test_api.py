@@ -128,10 +128,14 @@ def test_reorder_move_and_exports(client: TestClient) -> None:
         json={
             "description": "Chase through fog",
             "phases": [{"id": phase_id, "description": "Notice the debt"}],
+            "plot_archetype": "quest",
+            "delta": "The prize is a name, not an object.",
         },
     ).json()["project"]
     assert project["subplots"][0]["description"] == "Chase through fog"
     assert project["subplots"][0]["phases"][0]["description"] == "Notice the debt"
+    assert project["subplots"][0]["plot_archetype"] == "quest"
+    assert project["subplots"][0]["delta"] == "The prize is a name, not an object."
     project = client.post(f"/projects/{project_id}/subplots/{subplot_id}/phases").json()[
         "project"
     ]

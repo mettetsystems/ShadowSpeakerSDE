@@ -1,4 +1,5 @@
 import type { Subplot } from '../types';
+import { PLOT_ARCHETYPES, plotArchetypeOptionLabel } from '../plotArchetypes';
 import { CollapsiblePanelHeader, useCollapsiblePanel } from './CollapsiblePanel';
 
 const MAX_PHASES = 10;
@@ -10,6 +11,8 @@ interface SubplotPanelProps {
     name?: string;
     description?: string;
     phases?: { id: string; description: string }[];
+    plot_archetype?: string;
+    delta?: string;
     inciting_incident?: string;
     macguffin?: string;
     plot_twist?: string;
@@ -22,6 +25,8 @@ export function SubplotPanel({ subplot, onClose, onSave, onAddPhase }: SubplotPa
   const phases = subplot.phases ?? [];
   const atCap = phases.length >= MAX_PHASES;
   const { open, toggle } = useCollapsiblePanel(true);
+  const archetype = subplot.plot_archetype ?? '';
+  const delta = subplot.delta ?? '';
 
   return (
     <aside
@@ -70,6 +75,45 @@ export function SubplotPanel({ subplot, onClose, onSave, onAddPhase }: SubplotPa
             }}
           />
         </label>
+
+        <div className="subplot-archetype-row">
+          <label>
+            Plot archetype
+            <select
+              aria-label="Plot archetype"
+              key={`arch-${subplot.id}-${archetype}`}
+              defaultValue={archetype}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value !== archetype) {
+                  onSave({ plot_archetype: value });
+                }
+              }}
+            >
+              <option value="">Select an archetype…</option>
+              {PLOT_ARCHETYPES.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {plotArchetypeOptionLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Delta
+            <textarea
+              aria-label="Delta"
+              key={`delta-${subplot.id}-${delta}`}
+              defaultValue={delta}
+              rows={3}
+              placeholder="How this plot diverges from the template…"
+              onBlur={(event) => {
+                if (event.target.value !== delta) {
+                  onSave({ delta: event.target.value });
+                }
+              }}
+            />
+          </label>
+        </div>
 
         <label>
           Inciting Incident

@@ -31,6 +31,7 @@ from shadowspeaker.domain.mutations import (
     delete_block,
     delete_block_link,
     delete_chapter,
+    ensure_block_templates,
     move_block,
     paint_timeline_slot_coverage,
     reorder_blocks_in_chapter,
@@ -80,7 +81,10 @@ class ProjectService:
         project = await self._repo.get(project_id)
         if project is None:
             raise NotFoundError(f"Project not found: {project_id}")
-        return project
+        ensured = ensure_block_templates(project)
+        if len(ensured.block_templates) != len(project.block_templates):
+            return await self._repo.save(ensured)
+        return ensured
 
     async def save_project(self, project: StoryProject) -> StoryProject:
         existing = await self._repo.get(project.id)
@@ -232,6 +236,8 @@ class ProjectService:
             name=payload.get("name"),
             description=payload.get("description"),
             phases=payload.get("phases"),
+            plot_archetype=payload.get("plot_archetype"),
+            delta=payload.get("delta"),
             inciting_incident=payload.get("inciting_incident"),
             macguffin=payload.get("macguffin"),
             plot_twist=payload.get("plot_twist"),

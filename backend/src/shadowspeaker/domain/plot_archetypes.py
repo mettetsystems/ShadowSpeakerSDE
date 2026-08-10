@@ -1,0 +1,524 @@
+"""Canonical subplot plot-archetype catalog (100 templates)."""
+
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class PlotArchetype(TypedDict):
+    id: str
+    label: str
+    description: str
+
+
+# Descriptions are kept short for dropdown lines.
+PLOT_ARCHETYPES: tuple[PlotArchetype, ...] = (
+    {
+        "id": "heros_journey",
+        "label": "Hero's Journey",
+        "description": "Hero quests through trials, mentors, and transformation.",
+    },
+    {
+        "id": "coming_of_age",
+        "label": "Coming of Age",
+        "description": "Youth matures through trials into adulthood.",
+    },
+    {
+        "id": "love_triangle",
+        "label": "Love Triangle",
+        "description": "Three people locked in overlapping romance.",
+    },
+    {
+        "id": "revenge",
+        "label": "Revenge",
+        "description": "Wronged character seeks payback.",
+    },
+    {
+        "id": "forbidden_love",
+        "label": "Forbidden Love",
+        "description": "Lovers barred by class, clan, or law.",
+    },
+    {
+        "id": "rags_to_riches",
+        "label": "Rags to Riches",
+        "description": "Rise from obscurity to success or status.",
+    },
+    {
+        "id": "underdog",
+        "label": "Underdog",
+        "description": "Disadvantaged hero beats long odds.",
+    },
+    {
+        "id": "quest",
+        "label": "Quest",
+        "description": "Journey for an object, truth, or purpose.",
+    },
+    {
+        "id": "sacrifice",
+        "label": "Sacrifice",
+        "description": "Selfless act buys growth or redemption.",
+    },
+    {
+        "id": "mystery",
+        "label": "Mystery",
+        "description": "Puzzle or crime must be solved.",
+    },
+    {
+        "id": "betrayal",
+        "label": "Betrayal",
+        "description": "Trusted ally turns; fallout follows.",
+    },
+    {
+        "id": "chosen_one",
+        "label": "Chosen One",
+        "description": "Destined figure bears a fated role.",
+    },
+    {
+        "id": "fish_out_of_water",
+        "label": "Fish Out of Water",
+        "description": "Stranger flounders in alien setting.",
+    },
+    {
+        "id": "redemption",
+        "label": "Redemption",
+        "description": "Atone for past harm or failure.",
+    },
+    {
+        "id": "the_mentor",
+        "label": "The Mentor",
+        "description": "Seasoned guide trains a novice.",
+    },
+    {
+        "id": "parallel_worlds",
+        "label": "Parallel Worlds",
+        "description": "Characters cross alternate realities.",
+    },
+    {
+        "id": "dystopia",
+        "label": "Dystopia",
+        "description": "Oppressive society frames the conflict.",
+    },
+    {
+        "id": "overcoming_the_monster",
+        "label": "Overcoming the Monster",
+        "description": "Hero confronts and fells a great threat.",
+    },
+    {
+        "id": "escape",
+        "label": "Escape",
+        "description": "Break free of confinement or control.",
+    },
+    {
+        "id": "survival",
+        "label": "Survival",
+        "description": "Stay alive against harsh conditions.",
+    },
+    {
+        "id": "war",
+        "label": "War",
+        "description": "Conflict shaped by battle and its cost.",
+    },
+    {
+        "id": "discovery",
+        "label": "Discovery",
+        "description": "Uncover truth, ruins, or lost treasure.",
+    },
+    {
+        "id": "identity_crisis",
+        "label": "Identity Crisis",
+        "description": "Who am I—amnesia, masks, or doubt.",
+    },
+    {
+        "id": "the_double",
+        "label": "The Double",
+        "description": "Twin, clone, or double splits identity.",
+    },
+    {
+        "id": "voyage_and_return",
+        "label": "Voyage and Return",
+        "description": "Strange land, trials, home transformed.",
+    },
+    {
+        "id": "family_drama",
+        "label": "Family Drama",
+        "description": "Kinship bonds, fights, and fallout.",
+    },
+    {
+        "id": "rebellion",
+        "label": "Rebellion",
+        "description": "Challenge power or unjust systems.",
+    },
+    {
+        "id": "time_travel",
+        "label": "Time Travel",
+        "description": "Past or future trips change outcomes.",
+    },
+    {
+        "id": "apocalypse",
+        "label": "Apocalypse",
+        "description": "Catastrophe threatens human survival.",
+    },
+    {
+        "id": "power_and_corruption",
+        "label": "Power and Corruption",
+        "description": "Authority twists; intrigue follows.",
+    },
+    {
+        "id": "redemption_quest",
+        "label": "Redemption Quest",
+        "description": "Trials undertaken to wipe old sins.",
+    },
+    {
+        "id": "unrequited_love",
+        "label": "Unrequited Love",
+        "description": "One-sided desire drives the conflict.",
+    },
+    {
+        "id": "tragedy",
+        "label": "Tragedy",
+        "description": "Flaw or fate brings the hero down.",
+    },
+    {
+        "id": "reincarnation",
+        "label": "Reincarnation",
+        "description": "Lives recur across eras or bodies.",
+    },
+    {
+        "id": "survival_of_the_fittest",
+        "label": "Survival of the Fittest",
+        "description": "Compete or fight to endure.",
+    },
+    {
+        "id": "framing_device",
+        "label": "Framing Device",
+        "description": "Outer tale nests the main story.",
+    },
+    {
+        "id": "stranger_in_a_strange_land",
+        "label": "Stranger in a Strange Land",
+        "description": "Outsider adapts to foreign culture.",
+    },
+    {
+        "id": "escape_from_death",
+        "label": "Escape from Death",
+        "description": "Cheat imminent doom.",
+    },
+    {
+        "id": "forbidden_knowledge",
+        "label": "Forbidden Knowledge",
+        "description": "Pursuit of dangerous secrets.",
+    },
+    {
+        "id": "society_vs_individual",
+        "label": "Society vs. Individual",
+        "description": "Norms clash with personal will.",
+    },
+    {
+        "id": "supernatural_encounter",
+        "label": "Supernatural Encounter",
+        "description": "Meet the uncanny or otherworldly.",
+    },
+    {
+        "id": "body_swap",
+        "label": "Body Swap",
+        "description": "Switched bodies force new sight.",
+    },
+    {
+        "id": "the_prophecy",
+        "label": "The Prophecy",
+        "description": "Foretelling steers choices and fate.",
+    },
+    {
+        "id": "seeking_home",
+        "label": "Seeking Home",
+        "description": "Search for belonging or refuge.",
+    },
+    {
+        "id": "framed_for_a_crime",
+        "label": "Framed for a Crime",
+        "description": "Wrongly accused; chase justice.",
+    },
+    {
+        "id": "wandering_hero",
+        "label": "Wandering Hero",
+        "description": "Roaming champion rights wrongs.",
+    },
+    {
+        "id": "the_masquerade",
+        "label": "The Masquerade",
+        "description": "False faces hide true aims.",
+    },
+    {
+        "id": "time_loop",
+        "label": "Time Loop",
+        "description": "Events repeat until broken.",
+    },
+    {
+        "id": "love_at_first_sight",
+        "label": "Love at First Sight",
+        "description": "Instant, consuming attraction.",
+    },
+    {
+        "id": "human_vs_nature",
+        "label": "Human vs. Nature",
+        "description": "Endure disaster, beasts, or wild.",
+    },
+    {
+        "id": "heir_to_the_throne",
+        "label": "Heir to the Throne",
+        "description": "Claim or refuse inherited power.",
+    },
+    {
+        "id": "corrupting_influence",
+        "label": "Corrupting Influence",
+        "description": "Malevolent force twists the cast.",
+    },
+    {
+        "id": "the_big_game",
+        "label": "The Big Game",
+        "description": "High-stakes contest or tournament.",
+    },
+    {
+        "id": "cursed_object",
+        "label": "Cursed Object",
+        "description": "Relic that dooms its bearer.",
+    },
+    {
+        "id": "journey_to_the_center",
+        "label": "Journey to the Center",
+        "description": "Descend into a place to learn it.",
+    },
+    {
+        "id": "mistaken_identity",
+        "label": "Mistaken Identity",
+        "description": "Taken for another; chaos ensues.",
+    },
+    {
+        "id": "apocalypse_survival",
+        "label": "Apocalypse Survival",
+        "description": "Endure a ruined world.",
+    },
+    {
+        "id": "immortality_quest",
+        "label": "Immortality Quest",
+        "description": "Chase endless life and its price.",
+    },
+    {
+        "id": "sworn_enemies",
+        "label": "Sworn Enemies",
+        "description": "Rivals unite against a shared foe.",
+    },
+    {
+        "id": "impossible_love",
+        "label": "Impossible Love",
+        "description": "Love across species, realms, or law.",
+    },
+    {
+        "id": "revenge_of_the_underdog",
+        "label": "Revenge of the Underdog",
+        "description": "Oppressed underdog strikes back.",
+    },
+    {
+        "id": "prophecy_fulfillment",
+        "label": "Prophecy Fulfillment",
+        "description": "Live out a prophecy's cost.",
+    },
+    {
+        "id": "the_artifact",
+        "label": "The Artifact",
+        "description": "Find, guard, or seize a potent relic.",
+    },
+    {
+        "id": "betrayal_of_trust",
+        "label": "Betrayal of Trust",
+        "description": "Intimate betrayal fractures bonds.",
+    },
+    {
+        "id": "man_vs_machine",
+        "label": "Man vs. Machine",
+        "description": "Humanity clashes with tech or AI.",
+    },
+    {
+        "id": "amnesia",
+        "label": "Amnesia",
+        "description": "Lost memory rebuilt piece by piece.",
+    },
+    {
+        "id": "forbidden_power",
+        "label": "Forbidden Power",
+        "description": "Dangerous gift and its burden.",
+    },
+    {
+        "id": "mentors_redemption",
+        "label": "Mentor's Redemption",
+        "description": "Guide seeks pardon for old failure.",
+    },
+    {
+        "id": "madness_and_sanity",
+        "label": "Madness and Sanity",
+        "description": "Mind frays at sanity's edge.",
+    },
+    {
+        "id": "framed_for_betrayal",
+        "label": "Framed for Betrayal",
+        "description": "Set up as traitor; clear the name.",
+    },
+    {
+        "id": "race_against_time",
+        "label": "Race Against Time",
+        "description": "Beat a deadline or looming disaster.",
+    },
+    {
+        "id": "the_last_of_their_kind",
+        "label": "The Last of Their Kind",
+        "description": "Sole survivor of a people or line.",
+    },
+    {
+        "id": "the_secret_society",
+        "label": "The Secret Society",
+        "description": "Hidden order with veiled aims.",
+    },
+    {
+        "id": "forbidden_journey",
+        "label": "Forbidden Journey",
+        "description": "Enter a place against all warning.",
+    },
+    {
+        "id": "parental_sacrifice",
+        "label": "Parental Sacrifice",
+        "description": "Parents give all for their children.",
+    },
+    {
+        "id": "the_macguffin",
+        "label": "The MacGuffin",
+        "description": "Sought object that drives the chase.",
+    },
+    {
+        "id": "crime_and_punishment",
+        "label": "Crime and Punishment",
+        "description": "Wrongdoing meets justice or guilt.",
+    },
+    {
+        "id": "parallel_lives",
+        "label": "Parallel Lives",
+        "description": "Interwoven stories of many lives.",
+    },
+    {
+        "id": "the_fall_from_grace",
+        "label": "The Fall from Grace",
+        "description": "Plunge from power or prestige.",
+    },
+    {
+        "id": "the_false_prophecy",
+        "label": "The False Prophecy",
+        "description": "Believed fate proves a lie.",
+    },
+    {
+        "id": "hidden_heir",
+        "label": "Hidden Heir",
+        "description": "Secret lineage reshapes destiny.",
+    },
+    {
+        "id": "cursed_bloodline",
+        "label": "Cursed Bloodline",
+        "description": "Ancestral curse haunts the living.",
+    },
+    {
+        "id": "generation_gap",
+        "label": "Generation Gap",
+        "description": "Age cohorts misread each other.",
+    },
+    {
+        "id": "navigating_the_afterlife",
+        "label": "Navigating the Afterlife",
+        "description": "Journey beyond death's veil.",
+    },
+    {
+        "id": "framed_for_murder",
+        "label": "Framed for Murder",
+        "description": "Falsely blamed for a killing.",
+    },
+    {
+        "id": "obsession",
+        "label": "Obsession",
+        "description": "Fixation consumes and remakes.",
+    },
+    {
+        "id": "the_long_return_home",
+        "label": "The Long Return Home",
+        "description": "Hard road back after long absence.",
+    },
+    {
+        "id": "twist_of_fate",
+        "label": "Twist of Fate",
+        "description": "Chance swerves every plan.",
+    },
+    {
+        "id": "the_dark_past",
+        "label": "The Dark Past",
+        "description": "Old secrets return to haunt.",
+    },
+    {
+        "id": "the_heirloom",
+        "label": "The Heirloom",
+        "description": "Family relic holds power or truth.",
+    },
+    {
+        "id": "the_puppet_master",
+        "label": "The Puppet Master",
+        "description": "Unseen hand pulls the strings.",
+    },
+    {
+        "id": "the_final_stand",
+        "label": "The Final Stand",
+        "description": "Last battle against long odds.",
+    },
+    {
+        "id": "the_ultimate_power",
+        "label": "The Ultimate Power",
+        "description": "Race for supreme ability.",
+    },
+    {
+        "id": "the_perfect_crime",
+        "label": "The Perfect Crime",
+        "description": "Flawless scheme—until it isn't.",
+    },
+    {
+        "id": "the_sacrificial_hero",
+        "label": "The Sacrificial Hero",
+        "description": "Hero dies or yields to save others.",
+    },
+    {
+        "id": "the_enchanted_forest",
+        "label": "The Enchanted Forest",
+        "description": "Magical woods test all who enter.",
+    },
+    {
+        "id": "the_lost_civilization",
+        "label": "The Lost Civilization",
+        "description": "Find and face a vanished culture.",
+    },
+    {
+        "id": "the_hidden_enemy",
+        "label": "The Hidden Enemy",
+        "description": "Traitor hides inside the ranks.",
+    },
+    {
+        "id": "the_cursed_land",
+        "label": "The Cursed Land",
+        "description": "Haunted place holds dark history.",
+    },
+    {
+        "id": "the_time_paradox",
+        "label": "The Time Paradox",
+        "description": "Loops and timelines break causality.",
+    },
+)
+
+PLOT_ARCHETYPE_IDS: frozenset[str] = frozenset(item["id"] for item in PLOT_ARCHETYPES)
+PLOT_ARCHETYPE_BY_ID: dict[str, PlotArchetype] = {item["id"]: item for item in PLOT_ARCHETYPES}
+
+
+def plot_archetype_label(archetype_id: str) -> str:
+    item = PLOT_ARCHETYPE_BY_ID.get(archetype_id)
+    return item["label"] if item else archetype_id

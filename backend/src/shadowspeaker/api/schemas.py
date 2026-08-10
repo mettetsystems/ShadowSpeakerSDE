@@ -99,6 +99,8 @@ class PatchSubplotRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     description: str | None = None
     phases: list[PatchSubplotPhaseRequest] | None = None
+    plot_archetype: str | None = None
+    delta: str | None = None
     inciting_incident: str | None = None
     macguffin: str | None = None
     plot_twist: str | None = None
