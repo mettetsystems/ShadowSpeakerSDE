@@ -416,6 +416,30 @@ def test_subplot_plot_archetype_and_delta() -> None:
         update_subplot(project, subplot.id, plot_archetype="not_a_real_archetype")
 
 
+def test_character_archetype_and_delta() -> None:
+    project = create_project("Demo")
+    project = add_chapter(project, title="A")
+    project = add_block_from_template(
+        project, chapter_id=project.chapters[0].id, block_type="character"
+    )
+    character_id = next(iter(project.blocks))
+    project = update_block(
+        project,
+        character_id,
+        {
+            "archetype": "charming_scoundrel",
+            "archetype_delta": "Loyalty to crew first",
+        },
+    )
+    block = project.blocks[character_id]
+    assert isinstance(block, CharacterBlock)
+    assert block.archetype == "charming_scoundrel"
+    assert block.archetype_delta == "Loyalty to crew first"
+
+    with pytest.raises(ValidationConflictError):
+        update_block(project, character_id, {"archetype": "not_a_real_archetype"})
+
+
 def test_subplot_phases_default_and_cap() -> None:
     project = create_project("Demo")
     project = add_chapter(project, title="A")

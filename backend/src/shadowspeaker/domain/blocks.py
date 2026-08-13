@@ -49,7 +49,11 @@ class CharacterBlock(BlockBase):
     appearance: str = ""
     smell: str = ""
     personality: str = ""
+    # Catalog id from character_archetypes; empty means unset.
+    # Legacy free-text values may still appear until the user picks a catalog entry.
     archetype: str = ""
+    # How this character diverges from the chosen archetype template.
+    archetype_delta: str = ""
     aura: str = ""
     special_skillsets: list[str] = Field(default_factory=list)
     personalized_items: list[str] = Field(default_factory=list)

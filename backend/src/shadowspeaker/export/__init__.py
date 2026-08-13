@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from shadowspeaker.domain.blocks import BLOCK_TYPE_LABELS, Block
+from shadowspeaker.domain.character_archetypes import character_archetype_label
 from shadowspeaker.domain.models import Chapter, Plot, StoryProject, Subplot
 from shadowspeaker.domain.plot_archetypes import plot_archetype_label
 from shadowspeaker.domain.review import collect_review_warnings
@@ -459,6 +460,12 @@ def _append_block_fields(
         if key in {"id", "block_type", "title"}:
             continue
         if value in ("", [], None):
+            continue
+        if key == "archetype" and block.block_type == "character":
+            lines.append(f"- Archetype: {character_archetype_label(str(value))}")
+            continue
+        if key == "archetype_delta":
+            lines.append(f"- Archetype delta: {value}")
             continue
         field_label = key.replace("_", " ").title()
         if isinstance(value, list):

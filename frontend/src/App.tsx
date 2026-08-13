@@ -645,6 +645,7 @@ export default function App() {
 
           {selectedBlock ? (
             <BlockEditor
+              key={selectedBlock.id}
               block={selectedBlock}
               project={project}
               linkHint={
@@ -690,6 +691,7 @@ export default function App() {
 
           {selectedSubplot ? (
             <SubplotPanel
+              key={selectedSubplot.id}
               subplot={selectedSubplot}
               onClose={() => setUi((prev) => ({ ...prev, selectedSubplotId: null }))}
               onSave={(patch) => {
@@ -703,6 +705,7 @@ export default function App() {
 
           {selectedPlot ? (
             <PlotPanel
+              key={selectedPlot.id}
               plot={selectedPlot}
               onClose={() => setUi((prev) => ({ ...prev, selectedPlotId: null }))}
               onSave={(patch) => {

@@ -166,7 +166,10 @@ export interface CharacterBlock extends BlockBase {
   appearance: string;
   smell: string;
   personality: string;
+  /** Catalog id from characterArchetypes; empty means unset. */
   archetype: string;
+  /** How this character diverges from the chosen archetype template. */
+  archetype_delta: string;
   aura: string;
   special_skillsets: string[];
   personalized_items: string[];

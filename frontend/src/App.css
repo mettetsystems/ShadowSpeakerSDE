@@ -1041,6 +1041,7 @@ select {
   margin-bottom: 0.35rem;
 }
 
+.archetype-row,
 .subplot-archetype-row {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -1048,6 +1049,7 @@ select {
   align-items: start;
 }
 
+.archetype-row select,
 .subplot-archetype-row select {
   max-width: 100%;
 }
@@ -1060,6 +1062,7 @@ select {
 }
 
 @media (max-width: 720px) {
+  .archetype-row,
   .subplot-archetype-row {
     grid-template-columns: 1fr;
   }

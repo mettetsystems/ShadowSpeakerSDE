@@ -129,7 +129,8 @@ function sampleProject(): StoryProject {
         appearance: 'tall',
         smell: 'ozone',
         personality: 'sharp',
-        archetype: 'survivor',
+        archetype: 'resilient_survivor',
+        archetype_delta: '',
         aura: 'cold',
         special_skillsets: ['navigation'],
         personalized_items: ['compass'],
@@ -543,6 +544,38 @@ describe('timeline and block editor', () => {
             overheard: true,
           }),
         ],
+      }),
+    );
+  });
+
+  it('saves character archetype and delta', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const project = sampleProject();
+    render(
+      <BlockEditor
+        block={project.blocks.blk_character}
+        project={project}
+        onSave={onSave}
+        onClose={vi.fn()}
+        onStartLink={vi.fn()}
+        onDelete={vi.fn()}
+        linkHint={null}
+      />,
+    );
+    await user.selectOptions(
+      screen.getByLabelText('Character archetype'),
+      'charming_scoundrel',
+    );
+    await user.type(
+      screen.getByLabelText('Character archetype delta'),
+      'Loyalty to crew first',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save block' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        archetype: 'charming_scoundrel',
+        archetype_delta: 'Loyalty to crew first',
       }),
     );
   });

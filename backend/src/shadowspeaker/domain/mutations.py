@@ -13,6 +13,7 @@ from shadowspeaker.domain.blocks import (
     DEFAULT_BLOCK_TITLES,
     empty_block_payload,
 )
+from shadowspeaker.domain.character_archetypes import CHARACTER_ARCHETYPE_IDS
 from shadowspeaker.domain.plot_archetypes import PLOT_ARCHETYPE_IDS
 from shadowspeaker.domain.models import (
     DEFAULT_SUBPLOT_PHASES,
@@ -530,6 +531,16 @@ def update_block(project: StoryProject, block_id: str, patch: dict[str, Any]) ->
             data[key] = _clean_custom_strings([str(item) for item in value])
             continue
         data[key] = value
+    if data.get("block_type") == "character" and "archetype" in patch:
+        archetype = str(data.get("archetype") or "").strip()
+        data["archetype"] = archetype
+        previous = str(getattr(existing, "archetype", "") or "").strip()
+        if (
+            archetype
+            and archetype not in CHARACTER_ARCHETYPE_IDS
+            and archetype != previous
+        ):
+            raise ValidationConflictError(f"Unknown character archetype: {archetype}")
     block = parse_block(data)
     _validate_block_refs(updated, block)
     updated.blocks[block_id] = block

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  CHARACTER_ARCHETYPE_IDS,
+  CHARACTER_ARCHETYPES,
+  characterArchetypeOptionLabel,
+} from '../characterArchetypes';
+import {
   FIGURATIVE_DEVICES,
   assertNever,
   emptyDialogueLine,
@@ -16,6 +21,7 @@ import {
   settingIdsInChapter,
   settingSequenceInChapter,
 } from '../chapterBlocks';
+import { usePanelAutosave } from '../hooks/usePanelAutosave';
 import { CollapsiblePanelHeader, useCollapsiblePanel } from './CollapsiblePanel';
 
 interface BlockEditorProps {
@@ -50,12 +56,29 @@ export function BlockEditor({
 }: BlockEditorProps) {
   const title = `Edit ${block.block_type.replace('_', ' ')}`;
   const { open, toggle } = useCollapsiblePanel(true);
+  const formRef = useRef<HTMLFormElement>(null);
+  const blockRef = useRef(block);
+  blockRef.current = block;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
   const dialogueLinesRef = useRef<DialogueLine[]>(
     block.block_type === 'dialogue' ? ensureDialogueLines(block.lines) : [],
   );
 
+  const { markDirty, flushIfDirty } = usePanelAutosave(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const current = blockRef.current;
+    const patch = buildPatch(current, new FormData(form), {
+      dialogueLines:
+        current.block_type === 'dialogue' ? dialogueLinesRef.current : undefined,
+    });
+    onSaveRef.current(patch);
+  });
+
   function handleDialogueLinesChange(lines: DialogueLine[]) {
     dialogueLinesRef.current = lines;
+    markDirty();
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -66,6 +89,11 @@ export function BlockEditor({
         block.block_type === 'dialogue' ? dialogueLinesRef.current : undefined,
     });
     onSave(patch);
+  }
+
+  function handleClose() {
+    flushIfDirty();
+    onClose();
   }
 
   return (
@@ -79,45 +107,51 @@ export function BlockEditor({
         onToggle={toggle}
         showActionsWhenCollapsed
         actions={
-          <button type="button" className="ghost" onClick={onClose}>
+          <button type="button" className="ghost" onClick={handleClose}>
             Close
           </button>
         }
       />
-      {open ? (
-        <form className="stack" onSubmit={handleSubmit} noValidate>
-          <label>
-            Title
-            <input
-              name="title"
-              defaultValue={block.title}
-              key={`${block.id}-title`}
-              aria-label="Title"
-            />
-          </label>
-          {renderTypedFields(
-            block,
-            project,
-            onSetSettingSequence,
-            handleDialogueLinesChange,
-          )}
-          <div className="button-row">
-            <button type="submit">Save block</button>
-            {block.block_type === 'dialogue' && onSaveAsTemplate ? (
-              <button type="button" className="secondary" onClick={onSaveAsTemplate}>
-                Save as template
-              </button>
-            ) : null}
-            <button type="button" className="secondary" onClick={onStartLink}>
-              Link to another block
+      <form
+        ref={formRef}
+        className="stack"
+        hidden={!open}
+        onSubmit={handleSubmit}
+        onInput={markDirty}
+        onChange={markDirty}
+        noValidate
+      >
+        <label>
+          Title
+          <input
+            name="title"
+            defaultValue={block.title}
+            key={`${block.id}-title`}
+            aria-label="Title"
+          />
+        </label>
+        {renderTypedFields(
+          block,
+          project,
+          onSetSettingSequence,
+          handleDialogueLinesChange,
+        )}
+        <div className="button-row">
+          <button type="submit">Save block</button>
+          {block.block_type === 'dialogue' && onSaveAsTemplate ? (
+            <button type="button" className="secondary" onClick={onSaveAsTemplate}>
+              Save as template
             </button>
-            <button type="button" className="danger" onClick={onDelete}>
-              Delete
-            </button>
-          </div>
-          {linkHint ? <p className="hint">{linkHint}</p> : null}
-        </form>
-      ) : null}
+          ) : null}
+          <button type="button" className="secondary" onClick={onStartLink}>
+            Link to another block
+          </button>
+          <button type="button" className="danger" onClick={onDelete}>
+            Delete
+          </button>
+        </div>
+        {linkHint ? <p className="hint">{linkHint}</p> : null}
+      </form>
     </aside>
   );
 }
@@ -465,10 +499,36 @@ function renderTypedFields(
             Personality
             <textarea name="personality" defaultValue={block.personality} rows={2} />
           </label>
-          <label>
-            Archetype
-            <input name="archetype" defaultValue={block.archetype} />
-          </label>
+          <div className="archetype-row">
+            <label>
+              Character archetype
+              <select
+                name="archetype"
+                aria-label="Character archetype"
+                defaultValue={block.archetype}
+              >
+                <option value="">Select an archetype…</option>
+                {block.archetype && !CHARACTER_ARCHETYPE_IDS.has(block.archetype) ? (
+                  <option value={block.archetype}>{block.archetype} (custom)</option>
+                ) : null}
+                {CHARACTER_ARCHETYPES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {characterArchetypeOptionLabel(item)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Delta
+              <textarea
+                name="archetype_delta"
+                aria-label="Character archetype delta"
+                defaultValue={block.archetype_delta ?? ''}
+                rows={3}
+                placeholder="How this character diverges from the template…"
+              />
+            </label>
+          </div>
           <label>
             Aura
             <input name="aura" defaultValue={block.aura} />
@@ -499,7 +559,7 @@ function renderTypedFields(
               <option value="">None</option>
               {foilOptions(project, block.id).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.title || item.id} ({item.block_type})
+                  {item.title || item.id}
                 </option>
               ))}
             </select>
@@ -699,6 +759,7 @@ function buildPatch(
         smell: get('smell'),
         personality: get('personality'),
         archetype: get('archetype'),
+        archetype_delta: get('archetype_delta'),
         aura: get('aura'),
         special_skillsets: listField(get('special_skillsets')),
         personalized_items: listField(get('personalized_items')),
